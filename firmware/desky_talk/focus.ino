@@ -19,6 +19,17 @@ volatile uint32_t focusEnd = 0;      // millis when the session ends; 0 = no ses
 volatile uint32_t exerciseEnd = 0;   // millis when the exercise photos are done
 uint32_t nextCheck = 0;
 volatile int checksPassed = 0, checksFailed = 0;
+volatile bool zgOffline = false;     // 0G gave no decision: timer paused, no verdict
+uint32_t lastCheckAt = 0;
+const uint32_t RETRY_MS = 15000;     // try 0G again this soon after it fails
+
+// safe stop: the time since the last check does not count, and nothing is decided
+void safeStop(uint32_t lost) {
+  zgOffline = true;
+  focusEnd += lost;
+  nextCheck = millis() + RETRY_MS;
+  LOG("FOCUS", "SAFE STOP: no decision from 0G, timer paused, retry in %lu s", (unsigned long)(RETRY_MS / 1000));
+}
 
 bool focusOn() { return focusEnd != 0; }
 
@@ -43,6 +54,38 @@ void cameraStart() {
   camOk = err == ESP_OK;
   if (camOk) LOG("CAM", "ready, sensor 0x%x", esp_camera_sensor_get()->id.PID);
   else LOG("CAM", "FAILED (0x%x): focus sessions run without camera checks", err);
+}
+
+// live view: open http://<desky ip>/ on a laptop on the same wi-fi. one viewer at a time.
+void liveStart() {
+  if (!camOk) return;
+  httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
+  httpd_handle_t server = nullptr;
+  if (httpd_start(&server, &cfg) != ESP_OK) { LOG("LIVE", "server FAILED"); return; }
+  httpd_uri_t page = { "/", HTTP_GET, [](httpd_req_t* req) -> esp_err_t {
+    const char* html = "<!doctype html><title>Desky camera</title><body style='margin:0;background:#000;display:grid;place-items:center;height:100vh'>"
+                       "<img src='/stream' style='width:min(100vw,133vh);image-rendering:pixelated'></body>";
+    return httpd_resp_send(req, html, HTTPD_RESP_USE_STRLEN);
+  }, nullptr };
+  httpd_uri_t stream = { "/stream", HTTP_GET, [](httpd_req_t* req) -> esp_err_t {
+    httpd_resp_set_type(req, "multipart/x-mixed-replace;boundary=frame");
+    char head[80];
+    while (true) {   // ends when the browser closes the tab
+      camera_fb_t* fb = esp_camera_fb_get();
+      if (!fb) { delay(100); continue; }
+      int n = snprintf(head, sizeof(head), "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n", (unsigned)fb->len);
+      esp_err_t e = httpd_resp_send_chunk(req, head, n);
+      if (e == ESP_OK) e = httpd_resp_send_chunk(req, (const char*)fb->buf, fb->len);
+      if (e == ESP_OK) e = httpd_resp_send_chunk(req, "\r\n", 2);
+      esp_camera_fb_return(fb);
+      if (e != ESP_OK) return e;
+      delay(150);   // about 6 frames a second, leaves wi-fi room for voice
+    }
+  }, nullptr };
+  httpd_register_uri_handler(server, &page);
+  httpd_register_uri_handler(server, &stream);
+  if (WiFi.status() == WL_CONNECTED) LOG("LIVE", "camera at http://%s/ (laptop on the same wi-fi)", WiFi.localIP().toString().c_str());
+  else LOG("LIVE", "camera server on, the address shows once wi-fi connects");
 }
 
 // one fresh photo as a data url for the vision model ("" if the camera fails)
@@ -80,8 +123,8 @@ String vision(const char* question, const String* photos, int count) {
     JsonObject im = content.add<JsonObject>();
     im["type"] = "image_url"; im["image_url"]["url"] = photos[i];
   }
+  // 0G only: focus decisions never fall back to another model ("" = 0G offline, caller safe-stops)
   String answer = chat("VISION", true, req);
-  if (!answer.length()) { LOG("VISION", "trying OpenRouter"); answer = chat("VISION", false, req); }
   LOG("VISION", "\"%s\"", answer.c_str());
   return answer;
 }
@@ -147,6 +190,8 @@ void startFocus(int minutes) {
   if (!focusEnd) focusEnd = 1;
   nextCheck = millis() + CHECK_EVERY_MS;
   checksPassed = checksFailed = 0;
+  zgOffline = false;
+  lastCheckAt = millis();
   LOG("FOCUS", "session started: %d min, camera check every %lu s", minutes, (unsigned long)(CHECK_EVERY_MS / 1000));
 }
 
@@ -175,7 +220,11 @@ void attentionCheck() {
   String tool, msg;
   bool ok = desc.length() && askBackend("img", desc, tool, msg);
   state = S_IDLE;
-  if (tool != "attention") return;   // no camera, or no answer from the backend: no verdict
+  uint32_t lost = millis() - lastCheckAt;
+  lastCheckAt = millis();
+  if (!shot.length()) return;                    // camera failed: no verdict, timer runs
+  if (tool != "attention") { safeStop(lost); return; }   // 0G vision or the backend's 0G call failed
+  zgOffline = false;
   if (ok) { checksPassed++; state = S_HAPPY; delay(1200); state = S_IDLE; }
   else {
     // backend warns first (neck exercise), then slashes on the second miss
@@ -210,8 +259,15 @@ void exerciseTest() {
   v.trim();
   v.toUpperCase();
   bool did = v.startsWith("YES");
-  LOG("EXERCISE", "%s (%d photos): %s", did ? "done" : "not done", got, verdict.c_str());
   state = S_IDLE;
+  if (!verdict.length()) {
+    // 0G gave no answer: never guess. Keep the session open and run the test again soon.
+    focusEnd = millis() + RETRY_MS;
+    safeStop(0);
+    say("I cannot reach my brain right now, so I will check your exercise again in a moment.", S_SAD);
+    return;
+  }
+  LOG("EXERCISE", "%s (%d photos): %s", did ? "done" : "not done", got, verdict.c_str());
   if (!did) {
     // ponytail: no backend "invest" tool yet; call it here when it exists
     say("I did not see the exercise, so your stake stays locked and goes into savings.", S_SAD);
@@ -256,9 +312,10 @@ void focusOverlay(bool exercising) {
   long left = end ? max(0L, (long)(end - millis()) / 1000) : 0;
   char buf[24];
   if (exercising) snprintf(buf, sizeof(buf), "MOVE! %ld", left);
+  else if (zgOffline) snprintf(buf, sizeof(buf), "0G OFFLINE");
   else snprintf(buf, sizeof(buf), "%02ld:%02ld", left / 60, left % 60);
   canvas->setTextSize(2);
-  canvas->setTextColor(exercising ? PAL[ORG] : PAL[WHT]);
+  canvas->setTextColor(exercising ? PAL[ORG] : zgOffline ? PAL[RED] : PAL[WHT]);
   canvas->setCursor((160 - (int)strlen(buf) * 12) / 2, 104);
   canvas->print(buf);
   if (!exercising) {

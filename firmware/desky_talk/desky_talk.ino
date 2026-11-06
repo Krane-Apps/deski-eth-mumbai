@@ -16,6 +16,7 @@
 #include "mbedtls/base64.h"
 #include <time.h>
 #include "esp_camera.h"
+#include "esp_http_server.h"
 #include "secrets.h"   // WIFI_NAME, WIFI_PASSWORD, ZG_KEY, OPENROUTER_KEY, ELEVENLABS_KEY, BACKEND_URL
 
 // ================= settings =================
@@ -689,6 +690,7 @@ void setup() {
   configTzTime("IST-5:30", "pool.ntp.org", "time.google.com");   // keeps the clock right once wi-fi is up
   if (WiFi.status() == WL_CONNECTED) LOG("WIFI", "connected, ip %s, %d dBm", WiFi.localIP().toString().c_str(), WiFi.RSSI());
   else LOG("WIFI", "not connected yet. On the iPhone turn on Personal Hotspot and Maximize Compatibility");
+  liveStart();
 
   state = S_HAPPY;
   tone(880, 120); delay(60); tone(1320, 120);
@@ -706,6 +708,10 @@ void loop() {
     String ssid = findNetwork();
     WiFi.begin(ssid.c_str(), WIFI_PASSWORD);
   }
+  static bool wasUp = WiFi.status() == WL_CONNECTED;
+  bool up = WiFi.status() == WL_CONNECTED;
+  if (up && !wasUp) LOG("LIVE", "wi-fi up, camera at http://%s/", WiFi.localIP().toString().c_str());
+  wasUp = up;
   if (digitalRead(BTN) != LOW) { focusTick(); delay(10); return; }
   if (WiFi.status() != WL_CONNECTED) {
     oops("no wifi yet");
