@@ -4,7 +4,7 @@
 // time up -> exercise photos -> 0G says yes or no -> yes asks the backend to unstake.
 
 const int      FOCUS_DEFAULT_MIN = 2;       // when the user says no number of minutes
-const uint32_t CHECK_EVERY_MS    = 60000;   // camera attention check interval
+const uint32_t CHECK_EVERY_MS    = 10000;   // gap between camera attention checks (counted from the end of the last check)
 const int      EXERCISE_WAIT_S   = 6;       // time to start moving before the photos
 const int      EXERCISE_PHOTOS   = 3;
 const int      PHOTO_GAP_MS      = 2500;
@@ -287,8 +287,10 @@ void focusTick() {
   if (!focusOn() || WiFi.status() != WL_CONNECTED) return;
   if ((int32_t)(millis() - focusEnd) >= 0) { exerciseTest(); return; }
   if ((int32_t)(millis() - nextCheck) >= 0) {
-    nextCheck = millis() + CHECK_EVERY_MS;
     attentionCheck();
+    // a check takes about 8 s, so wait from its end; this leaves time to hold the button and talk.
+    // safeStop() sets its own retry time, and a slash ends the session
+    if (!zgOffline) nextCheck = millis() + CHECK_EVERY_MS;
   }
 }
 
