@@ -36,7 +36,41 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
 ];
 
-type ToolName = 'stake' | 'unstake';
+// Image turns: user_text is "img" and ai_res is the vision AI's description of the camera frame.
+const ATTENTION_PROMPT =
+  'You receive a description of a camera frame of the user at their desk. ' +
+  'Decide whether the user is paying attention to their work. Always call `attention`.';
+
+const ATTENTION_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
+  type: 'function',
+  function: {
+    name: 'attention',
+    description: 'Report whether the user is paying attention to their work.',
+    parameters: {
+      type: 'object',
+      properties: {
+        attentive: { type: 'boolean', description: 'true if the user is focused on their work' },
+      },
+      required: ['attentive'],
+      additionalProperties: false,
+    },
+  },
+};
+
+type ToolName = 'stake' | 'unstake' | 'attention';
+
+interface OgCall {
+  system: string;
+  tools: OpenAI.Chat.Completions.ChatCompletionTool[];
+  toolChoice: unknown;
+}
+
+const TEXT_CALL: OgCall = { system: SYSTEM_PROMPT, tools: TOOLS, toolChoice: 'auto' };
+const IMAGE_CALL: OgCall = {
+  system: ATTENTION_PROMPT,
+  tools: [ATTENTION_TOOL],
+  toolChoice: { type: 'function', function: { name: 'attention' } },
+};
 
 /**
  * Same shape for every response (see docs/tool-api.html). For unstake, the amounts are
@@ -53,6 +87,7 @@ export interface ToolResponse {
 const MESSAGES: Record<ToolName, { ok: (attn: number) => string; fail: string }> = {
   stake: { ok: (attn) => `Staked ${attn} ATTN. Focus session started.`, fail: 'Could not start the focus session.' },
   unstake: { ok: (attn) => `Unstaked ${attn} ATTN. Focus session ended.`, fail: 'Could not end the focus session.' },
+  attention: { ok: () => 'Attention check passed.', fail: 'Attention check failed.' },
 };
 
 /** Builds a response; adds `message` whenever a tool was called. */
@@ -86,7 +121,9 @@ export class ToolService {
   }
 
   async decide(userText: string, aiRes: string): Promise<ToolResponse> {
-    const res = await this.callOg(userText, aiRes);
+    if (userText.trim().toLowerCase() === 'img') return this.checkAttention(userText, aiRes);
+
+    const res = await this.callOg(TEXT_CALL, userText, aiRes);
     const reqId = (res as any).x_0g_trace?.request_id ?? res.id;
 
     // Only the first tool call is used; any others are ignored.
@@ -126,15 +163,42 @@ export class ToolService {
     return respond(name, r.success, r.usdcReturned, r.attnRemoved);
   }
 
-  private async callOg(userText: string, aiRes: string): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  /**
+   * Image turn: the model only gets the `attention` tool, so an image can never stake/unstake.
+   * success = attentive. If the model gives no usable answer we return tool: null rather than
+   * guessing "not attentive".
+   */
+  private async checkAttention(userText: string, aiRes: string): Promise<ToolResponse> {
+    const res = await this.callOg(IMAGE_CALL, userText, aiRes);
+    const reqId = (res as any).x_0g_trace?.request_id ?? res.id;
+
+    const call = res.choices[0]?.message?.tool_calls?.[0];
+    let attentive: unknown;
+    if (call?.type === 'function' && call.function.name === 'attention') {
+      try {
+        attentive = JSON.parse(call.function.arguments || '{}')?.attentive;
+      } catch {
+        // attentive stays undefined
+      }
+    }
+    if (typeof attentive !== 'boolean') {
+      this.logger.warn(`[0g ${reqId}] attention: no usable answer (${call?.type === 'function' ? call.function.arguments : 'no tool call'})`);
+      return failed();
+    }
+
+    this.logger.log(`[0g ${reqId}] attention attentive=${attentive}`);
+    return respond('attention', attentive);
+  }
+
+  private async callOg(call: OgCall, userText: string, aiRes: string): Promise<OpenAI.Chat.Completions.ChatCompletion> {
     try {
       return await this.og().chat.completions.create({
         model: env('OG_CHAT_MODEL'),
-        tool_choice: 'auto',
-        tools: TOOLS,
+        tool_choice: call.toolChoice,
+        tools: call.tools,
         verify_tee: true, // 0G extension
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: call.system },
           { role: 'user', content: userText },
           { role: 'assistant', content: aiRes },
         ],
