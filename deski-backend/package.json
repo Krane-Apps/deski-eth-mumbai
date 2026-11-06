@@ -9,12 +9,14 @@
     "start:prod": "node dist/main"
   },
   "dependencies": {
+    "@0gfoundation/0g-storage-ts-sdk": "^1.2.13",
     "@hashgraph/stablecoin-npm-sdk": "^4.4.0",
     "@hiero-ledger/sdk": "^2.79.0",
     "@nestjs/common": "^12.4.0",
     "@nestjs/core": "^12.4.0",
     "@nestjs/platform-express": "^12.4.0",
     "dotenv": "^18.0.9",
+    "ethers": "^6.13.1",
     "openai": "^7.53.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"

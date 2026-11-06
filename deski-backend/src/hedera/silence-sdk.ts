@@ -13,7 +13,7 @@ config({ path: path.resolve(__dirname, '../../../.env') });
 // backstop, mask the keys in anything written to stdout/stderr.
 console.log = console.info = console.debug = () => {};
 
-const secrets = [process.env.MY_PRIVATE_KEY, process.env.TEST_PRIVATE_KEY, process.env.OG_API_KEY, process.env.ENS_SUBGRAPH_URL]
+const secrets = [process.env.MY_PRIVATE_KEY, process.env.TEST_PRIVATE_KEY, process.env.OG_API_KEY, process.env.ENS_SUBGRAPH_URL, process.env.OG_STORAGE_PRIVATE_KEY]
   .flatMap((k) => (k ? [k, k.replace(/^0x/, '')] : []))
   .filter((s) => s.length >= 16);
 
