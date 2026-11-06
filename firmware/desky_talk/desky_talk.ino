@@ -14,11 +14,15 @@
 #include <ESP_I2S.h>
 #include "mbedtls/base64.h"
 #include <time.h>
-#include "secrets.h"   // WIFI_NAME, WIFI_PASSWORD, OPENROUTER_KEY, ELEVENLABS_KEY
+#include "secrets.h"   // WIFI_NAME, WIFI_PASSWORD, ZG_KEY, OPENROUTER_KEY, ELEVENLABS_KEY
 
 // ================= settings =================
 #define LAYOUT 2   // 1: the old wiring. 2: the compact build from the guide
 
+// 0G compute router answers first; openrouter is the fallback when 0G fails
+const char* ZG_URL        = "https://router-api.0g.ai/v1";
+const char* ZG_STT_MODEL  = "whisper-large-v3";    // runs sealed in a TEE (TeeML)
+const char* ZG_CHAT_MODEL = "0gm-1.0-35b-a3b";     // 0G's own model, TeeML
 const char* STT_MODEL  = "openai/whisper-1";
 const char* CHAT_MODEL = "openai/gpt-4o-mini";
 const char* VOICE_ID   = "JBFqnCBsd6RMkjVDRZzb";
@@ -406,15 +410,16 @@ struct Sink : Stream {
 
 // one POST with a fresh secure connection and one retry; returns the http code
 int post(const char* tag, const String& url, const char* keyHeader, const String& key,
-         const uint8_t* body, size_t len, String* text, Sink* bin = nullptr) {
-  for (int attempt = 1; attempt <= 2; attempt++) {
+         const uint8_t* body, size_t len, String* text, Sink* bin = nullptr,
+         const char* type = "application/json", int tries = 2, int timeoutMs = 30000) {
+  for (int attempt = 1; attempt <= tries; attempt++) {
     WiFiClientSecure net;
     net.setInsecure();   // no certificate check; fine for a hackathon demo
     HTTPClient http;
     http.setConnectTimeout(10000);
-    http.setTimeout(30000);
+    http.setTimeout(timeoutMs);
     if (!http.begin(net, url)) return -100;
-    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Content-Type", type);
     http.addHeader(keyHeader, key);
     int code = http.POST((uint8_t*)body, len);
     if (code == 200 && bin) http.writeToStream(bin);
@@ -427,9 +432,49 @@ int post(const char* tag, const String& url, const char* keyHeader, const String
   return -1;
 }
 
+const char* sttBy = "-";
+const char* chatBy = "-";
+
+// logs the 0G request id and provider, the proof of which TEE machine answered
+void logTrace(const char* tag, const char* model, uint32_t ms, JsonDocument& doc) {
+  LOG(tag, "used 0G %s in %lu ms, request_id %s, provider %s", model, (unsigned long)ms,
+      (const char*)(doc["x_0g_trace"]["request_id"] | "?"), (const char*)(doc["x_0g_trace"]["provider"] | "?"));
+}
+
+// 0G whisper takes a normal file upload (multipart form)
+String speechToText0G(size_t wavLen) {
+  const char* B = "deskyboundary7a1";
+  char head[400];
+  int hl = snprintf(head, sizeof(head),
+    "--%s\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n%s\r\n"
+    "--%s\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\nen\r\n"
+    "--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"talk.wav\"\r\nContent-Type: audio/wav\r\n\r\n",
+    B, ZG_STT_MODEL, B, B);
+  char tail[40];
+  int tl = snprintf(tail, sizeof(tail), "\r\n--%s--\r\n", B);
+  uint8_t* body = (uint8_t*)ps_malloc(hl + wavLen + tl);
+  if (!body) return "";
+  memcpy(body, head, hl);
+  memcpy(body + hl, wavBuf, wavLen);
+  memcpy(body + hl + wavLen, tail, tl);
+  String resp;
+  uint32_t t = millis();
+  int code = post("STT", String(ZG_URL) + "/audio/transcriptions", "Authorization", String("Bearer ") + ZG_KEY,
+                  body, hl + wavLen + tl, &resp, nullptr, (String("multipart/form-data; boundary=") + B).c_str(), 1, 25000);   // 0G whisper takes 11 to 16 s
+  free(body);
+  JsonDocument doc;
+  String words;
+  if (code == 200 && !deserializeJson(doc, resp)) { words = doc["text"] | ""; words.trim(); }
+  if (words.length()) logTrace("STT", ZG_STT_MODEL, millis() - t, doc);
+  else LOG("STT", "0G failed (http %d: %.120s), trying OpenRouter", code, resp.c_str());
+  return words;
+}
+
 String speechToText(size_t samples) {
   wavHeader(samples);
   size_t wavLen = 44 + samples * 2, b64 = 4 * ((wavLen + 2) / 3);
+  String zg = speechToText0G(wavLen);
+  if (zg.length()) { sttBy = "0G"; LOG("STT", "you said: \"%s\"", zg.c_str()); return zg; }
   char head[128];
   snprintf(head, sizeof(head), "{\"model\":\"%s\",\"language\":\"en\",\"input_audio\":{\"format\":\"wav\",\"data\":\"", STT_MODEL);
   size_t hl = strlen(head);
@@ -450,6 +495,8 @@ String speechToText(size_t samples) {
   if (deserializeJson(doc, resp)) return "";
   String words = doc["text"] | "";
   words.trim();
+  sttBy = "OpenRouter";
+  LOG("STT", "used OpenRouter %s", STT_MODEL);
   LOG("STT", "you said: \"%s\"", words.c_str());
   return words;
 }
@@ -471,24 +518,40 @@ void remember(const char* role, const String& t) {
   memRole[memCount] = role; memText[memCount] = t; memCount++;
 }
 
+// one chat call; returns the reply text, or "" on failure
+String chat(const char* tag, bool zg, JsonDocument& req) {
+  req["model"] = zg ? ZG_CHAT_MODEL : CHAT_MODEL;
+  if (zg) req["chat_template_kwargs"]["enable_thinking"] = false;   // thinking adds seconds of delay
+  else req.remove("chat_template_kwargs");
+  String body, resp;
+  serializeJson(req, body);
+  uint32_t t = millis();
+  int code = zg ? post(tag, String(ZG_URL) + "/chat/completions", "Authorization", String("Bearer ") + ZG_KEY,
+                       (uint8_t*)body.c_str(), body.length(), &resp, nullptr, "application/json", 1, 15000)
+                : post(tag, "https://openrouter.ai/api/v1/chat/completions", "Authorization", String("Bearer ") + OPENROUTER_KEY,
+                       (uint8_t*)body.c_str(), body.length(), &resp);
+  JsonDocument doc;
+  String answer;
+  if (code == 200 && !deserializeJson(doc, resp)) answer = doc["choices"][0]["message"]["content"] | "";
+  int think = answer.indexOf("</think>");   // some models leak their thinking before this tag
+  if (think >= 0) answer = answer.substring(think + 8);
+  answer.trim();
+  if (!answer.length()) { LOG(tag, "%s failed (http %d: %.120s)", zg ? "0G" : "OpenRouter", code, resp.c_str()); return ""; }
+  if (zg) logTrace(tag, ZG_CHAT_MODEL, millis() - t, doc);
+  else LOG(tag, "used OpenRouter %s in %lu ms", CHAT_MODEL, millis() - t);
+  return answer;
+}
+
 String reply(const String& said) {
   JsonDocument req;
-  req["model"] = CHAT_MODEL;
   req["max_tokens"] = 120;
   JsonArray m = req["messages"].to<JsonArray>();
   JsonObject sys = m.add<JsonObject>(); sys["role"] = "system"; sys["content"] = String(PERSONA) + nowText();
   for (int i = 0; i < memCount; i++) { JsonObject o = m.add<JsonObject>(); o["role"] = memRole[i]; o["content"] = memText[i]; }
   JsonObject u = m.add<JsonObject>(); u["role"] = "user"; u["content"] = said;
-  String body, resp;
-  serializeJson(req, body);
-  uint32_t t = millis();
-  int code = post("CHAT", "https://openrouter.ai/api/v1/chat/completions", "Authorization",
-                  String("Bearer ") + OPENROUTER_KEY, (uint8_t*)body.c_str(), body.length(), &resp);
-  LOG("CHAT", "http %d in %lu ms", code, millis() - t);
-  if (code != 200) { LOG("CHAT", "server said: %s", resp.c_str()); return ""; }
-  JsonDocument doc;
-  if (deserializeJson(doc, resp)) return "";
-  String answer = doc["choices"][0]["message"]["content"] | "";
+  String answer = chat("CHAT", true, req);
+  chatBy = "0G";
+  if (!answer.length()) { LOG("CHAT", "trying OpenRouter"); answer = chat("CHAT", false, req); chatBy = "OpenRouter"; }
   if (answer.length()) { remember("user", said); remember("assistant", answer); }
   LOG("CHAT", "desky says: \"%s\"", answer.c_str());
   return answer;
@@ -643,6 +706,7 @@ void loop() {
   size_t n = textToSpeech(answer);
   uint32_t audioMs = n * 1000UL / RATE;
   LOG("PLAY", "%.1f s of voice, %lu ms after you let go", audioMs / 1000.0, millis() - t0);
+  LOG("USED", "stt=%s chat=%s tts=%s", sttBy, chatBy, n ? "ElevenLabs" : "none");
 
   prepareText(answer, audioMs);
   state = S_TALK;
