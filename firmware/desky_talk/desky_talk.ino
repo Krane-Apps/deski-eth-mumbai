@@ -1,5 +1,6 @@
 // desky talk: hold the talk button, speak, let go. desky turns your words into text,
 // thinks of a reply, says it out loud and types it on the screen, with its pixel face.
+// focus.ino (second tab) adds staked focus sessions with camera checks.
 // libraries: "Adafruit ST7735 and ST7789" and "ArduinoJson" (v7).
 // tools: ESP32S3 Dev Module, PSRAM: OPI PSRAM, Flash Size: 16MB,
 // Partition Scheme: 16M Flash (3MB APP/9.9MB FATFS), USB CDC On Boot: Disabled, port: USB-UART.
@@ -14,7 +15,8 @@
 #include <ESP_I2S.h>
 #include "mbedtls/base64.h"
 #include <time.h>
-#include "secrets.h"   // WIFI_NAME, WIFI_PASSWORD, ZG_KEY, OPENROUTER_KEY, ELEVENLABS_KEY
+#include "esp_camera.h"
+#include "secrets.h"   // WIFI_NAME, WIFI_PASSWORD, ZG_KEY, OPENROUTER_KEY, ELEVENLABS_KEY, BACKEND_URL
 
 // ================= settings =================
 #define LAYOUT 2   // 1: the old wiring. 2: the compact build from the guide
@@ -84,7 +86,7 @@ uint8_t* replyBuf;    // spoken reply from ElevenLabs (16 kHz, 16-bit)
 size_t   replyMax;
 
 // ============ face: colour pixel expressions on a 48 x 32 grid ============
-enum State { S_IDLE, S_LISTEN, S_THINK, S_TALK, S_HAPPY, S_SAD };
+enum State { S_IDLE, S_LISTEN, S_THINK, S_TALK, S_HAPPY, S_SAD, S_EXERCISE };
 volatile int state = S_THINK;
 
 const int GW = 48, GH = 32;
@@ -302,13 +304,16 @@ void faceTask(void*) {
     else {
       memset(grid, OFF, sizeof(grid));
       switch (s) {
-        case S_IDLE:   faceIdle(f);   break;
+        case S_IDLE:   if (focusOn()) faceFocus(f); else faceIdle(f); break;
+        case S_EXERCISE: faceExercise(f); break;
         case S_LISTEN: faceListen(f); break;
         case S_THINK:  faceThink(f);  break;
         case S_HAPPY:  faceHappy(f);  break;
         case S_SAD:    faceSad(f);    break;
       }
       drawGrid();
+      if (s == S_IDLE && focusOn()) focusOverlay(false);
+      if (s == S_EXERCISE) focusOverlay(true);
     }
     wifiIcon(WiFi.status() == WL_CONNECTED);
     tft.drawRGBBitmap(0, 0, canvas->getBuffer(), 160, 128);
@@ -408,17 +413,19 @@ struct Sink : Stream {
   void flush() override {}
 };
 
-// one POST with a fresh secure connection and one retry; returns the http code
+// one POST with a fresh connection (https, or plain http for a laptop backend) and retries; returns the http code
 int post(const char* tag, const String& url, const char* keyHeader, const String& key,
          const uint8_t* body, size_t len, String* text, Sink* bin = nullptr,
          const char* type = "application/json", int tries = 2, int timeoutMs = 30000) {
   for (int attempt = 1; attempt <= tries; attempt++) {
-    WiFiClientSecure net;
-    net.setInsecure();   // no certificate check; fine for a hackathon demo
+    WiFiClientSecure tlsNet;
+    WiFiClient plainNet;
+    tlsNet.setInsecure();   // no certificate check; fine for a hackathon demo
+    bool tls = url.startsWith("https://");
     HTTPClient http;
     http.setConnectTimeout(10000);
     http.setTimeout(timeoutMs);
-    if (!http.begin(net, url)) return -100;
+    if (!http.begin(tls ? (WiFiClient&)tlsNet : plainNet, url)) return -100;
     http.addHeader("Content-Type", type);
     http.addHeader(keyHeader, key);
     int code = http.POST((uint8_t*)body, len);
@@ -589,6 +596,21 @@ int splitMood(String& s) {
   return mood;
 }
 
+// speaks the words, types them on the screen, then shows the mood for a moment
+void say(const String& words, int mood) {
+  size_t n = textToSpeech(words);
+  uint32_t audioMs = n * 1000UL / RATE;
+  LOG("PLAY", "%.1f s of voice (tts=%s)", audioMs / 1000.0, n ? "ElevenLabs" : "none");
+  prepareText(words, audioMs);
+  state = S_TALK;
+  if (n) play((int16_t*)replyBuf, n);
+  uint32_t until = typeStart + totalChars * msPerChar + 1500;
+  while (millis() < until) delay(20);   // let the typing finish, then a moment to read
+  delay(1200);
+  if (mood != S_IDLE) { state = mood; delay(1500); }
+  state = S_IDLE;
+}
+
 void oops(const char* why) {
   LOG("FAIL", "%s", why);
   state = S_SAD;
@@ -649,6 +671,8 @@ void setup() {
     while (true) delay(1000);
   }
   xTaskCreatePinnedToCore(faceTask, "face", 6144, nullptr, 1, nullptr, 0);
+  cameraStart();
+  checkMinutesParser();
 
   spk.setPins(AMP_BCLK, AMP_LRC, AMP_DIN);
   LOG("BOOT", "speaker %s", spk.begin(I2S_MODE_STD, RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO) ? "ready" : "FAILED");
@@ -682,7 +706,7 @@ void loop() {
     String ssid = findNetwork();
     WiFi.begin(ssid.c_str(), WIFI_PASSWORD);
   }
-  if (digitalRead(BTN) != LOW) { delay(10); return; }
+  if (digitalRead(BTN) != LOW) { focusTick(); delay(10); return; }
   if (WiFi.status() != WL_CONNECTED) {
     oops("no wifi yet");
     while (digitalRead(BTN) == LOW) delay(10);
@@ -703,19 +727,7 @@ void loop() {
   String answer = reply(said);
   if (!answer.length()) { oops("reply failed, see [CHAT]"); return; }
   int mood = splitMood(answer);
-  size_t n = textToSpeech(answer);
-  uint32_t audioMs = n * 1000UL / RATE;
-  LOG("PLAY", "%.1f s of voice, %lu ms after you let go", audioMs / 1000.0, millis() - t0);
-  LOG("USED", "stt=%s chat=%s tts=%s", sttBy, chatBy, n ? "ElevenLabs" : "none");
-
-  prepareText(answer, audioMs);
-  state = S_TALK;
-  if (n) play((int16_t*)replyBuf, n);
-  uint32_t until = typeStart + totalChars * msPerChar + 1500;
-  while (millis() < until) delay(20);   // let the typing finish, then a moment to read
-  delay(1200);
-
-  state = mood;
-  delay(1500);
-  state = S_IDLE;
+  LOG("USED", "stt=%s chat=%s, %lu ms after you let go", sttBy, chatBy, millis() - t0);
+  say(answer, mood);
+  focusAfterTurn(said, answer);   // the backend decides if this turn stakes or unstakes
 }
