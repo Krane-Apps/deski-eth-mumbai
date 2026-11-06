@@ -92,7 +92,10 @@ uint8_t grid[GH][GW];
 const bool SWAP_RB = false;
 uint16_t rgb(uint8_t r, uint8_t g, uint8_t b) { return SWAP_RB ? tft.color565(b, g, r) : tft.color565(r, g, b); }
 
+int OX = 0, OY = 0;   // shifts the whole face, for bobbing and swaying
+
 void fill(int x, int y, int w, int h, uint8_t c = WHT) {
+  x += OX; y += OY;
   for (int j = y; j < y + h; j++)
     for (int i = x; i < x + w; i++)
       if (i >= 0 && i < GW && j >= 0 && j < GH) grid[j][i] = c;
@@ -102,15 +105,126 @@ void line(int x0, int y0, int x1, int y1, int t, uint8_t c) {
   for (int s = 0; s <= n; s++)
     fill(round(x0 + (x1 - x0) * (float)s / n), round(y0 + (y1 - y0) * (float)s / n), t, t, c);
 }
-void heart(int x, int y) {
-  const char* rows[6] = { ".rr.rr.", "rrrrrrr", "rrrrrrr", ".rrrrr.", "..rrr..", "...r..." };
-  for (int j = 0; j < 6; j++) for (int i = 0; i < 7; i++) if (rows[j][i] == 'r') fill(x + i, y + j, 1, 1, RED);
+void sprite(const char* const* rows, int n, int x, int y, uint8_t c) {
+  for (int j = 0; j < n; j++)
+    for (int i = 0; rows[j][i]; i++)
+      if (rows[j][i] == '#') fill(x + i, y + j, 1, 1, c);
 }
+#define SPRITE(r, x, y, c) sprite(r, sizeof(r) / sizeof(r[0]), x, y, c)
+int jr(float v) { return (int)floorf(v + 0.5f); }   // rounds the same way as the browser preview
 
-void faceIdle(int f) {
+const char* HEART[]  = { ".##.##.", "#######", "#######", ".#####.", "..###..", "...#..." };
+const char* NOTE[]   = { "..#..", "..##.", "..#.#", "..#..", "..#..", "###..", "###.." };
+const char* NOTE2[]  = { "..#####", "..#...#", "..#...#", "..#...#", "..#...#", "###.###", "###.###" };
+const char* ZED[]    = { "####", "..#.", ".#..", "####" };
+const char* ZBIG[]   = { "#####", "...#.", "..#..", ".#...", "#####" };
+const char* QMARK[]  = { ".###.", "#...#", "...#.", "..#..", ".....", "..#.." };
+const char* SPARK[]  = { "..#..", "..#..", "#####", "..#..", "..#.." };
+const char* SPARK2[] = { ".#.", "###", ".#." };
+const char* RING[]   = { ".##.", "#..#", "#..#", ".##." };
+const char* RING3[]  = { "###", "#.#", "###" };
+const uint8_t RAINBOW[6] = { YEL, PNK, CYN, GRN, ORG, PUR };
+
+void heart(int x, int y) { SPRITE(HEART, x, y, RED); }
+
+// ---- idle faces (preview: claude.ai artifact "Desky Idle Faces") ----
+void faceBlink(int f) {
   if (f % 20 == 15 || f % 20 == 16) { fill(13, 15, 5, 1, CYN); fill(30, 15, 5, 1, CYN); }
   else { fill(13, 10, 5, 6, CYN); fill(30, 10, 5, 6, CYN); }
   fill(20, 22, 8, 2, CYN);
+}
+void faceLook(int f) {
+  const int dxs[6] = { 0, -4, -4, 0, 4, 4 };
+  int dx = dxs[(f / 5) % 6];
+  if (f % 30 == 29) { fill(13 + dx, 15, 5, 1, CYN); fill(30 + dx, 15, 5, 1, CYN); }
+  else { fill(13 + dx, 10, 5, 6, CYN); fill(30 + dx, 10, 5, 6, CYN); }
+  fill(20 + dx / 2, 22, 8, 2, CYN);
+}
+void faceWhistle(int f) {
+  OY = (f / 4) % 2;
+  fill(12, 12, 1, 1, CYN); fill(13, 13, 4, 1, CYN); fill(17, 12, 1, 1, CYN);
+  fill(29, 12, 1, 1, CYN); fill(30, 13, 4, 1, CYN); fill(34, 12, 1, 1, CYN);
+  fill(9, 17, 4, 2, PNK); fill(35, 17, 4, 2, PNK);
+  if (f % 4 < 2) SPRITE(RING, 22, 20, CYN); else SPRITE(RING3, 22, 21, CYN);
+  OY = 0;
+  for (int k = 0; k < 3; k++) {   // three notes rise out of the mouth, each a new colour
+    int t = (f + k * 6) % 18, r = (f + k * 6) / 18;
+    int x = 26 + jr(t * 0.9f + sinf(t * 0.7f) * 1.5f), y = 17 - t;
+    uint8_t c = RAINBOW[(r + k * 2) % 6];
+    if (k == 1) SPRITE(NOTE2, x, y, c); else SPRITE(NOTE, x, y, c);
+  }
+}
+void faceHum(int f) {
+  OY = jr(sinf(f * 0.6f) * 1.5f);
+  line(11, 14, 15, 10, 2, YEL); line(15, 10, 19, 14, 2, YEL);
+  line(28, 14, 32, 10, 2, YEL); line(32, 10, 36, 14, 2, YEL);
+  fill(18, 21, 2, 2, YEL); fill(20, 23, 8, 2, YEL); fill(28, 21, 2, 2, YEL);
+  OY = 0;
+  SPRITE(NOTE, 4 + jr(sinf(f * 0.4f) * 2), 2, RAINBOW[(f / 8) % 6]);
+}
+void faceWink(int f) {
+  fill(13, 10, 5, 6, CYN);
+  if (f % 16 >= 8) {
+    line(30, 11, 34, 13, 1, CYN); line(34, 13, 30, 15, 1, CYN);
+    if (f % 2) SPRITE(SPARK, 37, 4, YEL); else SPRITE(SPARK2, 38, 5, YEL);
+    fill(24, 25, 3, 2, PNK);
+  } else fill(30, 10, 5, 6, CYN);
+  fill(18, 21, 2, 2, CYN); fill(20, 23, 8, 2, CYN); fill(28, 21, 2, 2, CYN);
+}
+void faceYawn(int f) {
+  int t = f % 30;
+  int open = t < 6 ? t : t < 14 ? 6 : t < 20 ? 20 - t : 0;
+  if (open > 2) { fill(13, 15, 5, 1, CYN); fill(30, 15, 5, 1, CYN); }
+  else { fill(13, 13, 5, 3, CYN); fill(30, 13, 5, 3, CYN); }
+  if (open > 0) {
+    int h = 2 + open;
+    fill(21, 26 - h, 6, h, PNK);
+    fill(22, 27 - h, 4, h - 2, OFF);
+  } else fill(21, 23, 6, 1, CYN);
+  if (t >= 14) {
+    int z = t - 14;
+    SPRITE(ZED, 36 + z / 2, 12 - z / 2, BLU);
+    if (z > 4) SPRITE(ZBIG, 39 + (z - 4) / 2, 8 - (z - 4) / 2, PUR);
+  }
+}
+void faceAmazed(int f) {
+  if (f % 4 < 2) { SPRITE(SPARK, 13, 10, YEL); SPRITE(SPARK2, 31, 11, YEL); }
+  else { SPRITE(SPARK2, 14, 11, YEL); SPRITE(SPARK, 30, 10, YEL); }
+  SPRITE(RING, 22, 20, CYN);
+  if (f % 6 < 3) SPRITE(SPARK2, 4, 4, CYN); else SPRITE(SPARK2, 41, 22, PNK);
+}
+void faceDance(int f) {
+  const int sway[8] = { -2, -1, 0, 1, 2, 1, 0, -1 };
+  OX = sway[f % 8];
+  line(13, 9, 17, 12, 2, CYN); line(17, 12, 13, 15, 2, CYN);
+  line(35, 9, 31, 12, 2, CYN); line(31, 12, 35, 15, 2, CYN);
+  fill(19, 20, 10, 2, PNK); fill(20, 22, 8, 2, PNK); fill(22, 24, 4, 1, PNK);
+  OX = 0;
+  int bob = (f / 2) % 2;
+  SPRITE(NOTE, 2, 6 + bob, RAINBOW[(f / 4) % 6]);
+  SPRITE(NOTE2, 39, 9 - bob, RAINBOW[(f / 4 + 3) % 6]);
+}
+void faceCurious(int f) {
+  int tilt = (f / 10) % 2;
+  fill(12, 9 - tilt, 6, 7 + tilt, CYN);
+  fill(31, 11, 4, 4, CYN);
+  line(29, 7 - tilt, 36, 5 - tilt, 1, CYN);
+  fill(22, 23, 5, 2, CYN);
+  SPRITE(QMARK, 40, 2 + (f / 3) % 2, ORG);
+}
+
+// idle mix: starts with a blink, then a random new face every 32 frames (about 4 s), never the same twice in a row
+void (*const IDLE_FACES[])(int) = { faceBlink, faceLook, faceWhistle, faceHum, faceWink, faceYawn, faceAmazed, faceDance, faceCurious };
+const int IDLE_COUNT = sizeof(IDLE_FACES) / sizeof(IDLE_FACES[0]);
+void faceIdle(int f) {
+  static int cur = 0, start = 0;
+  if (f == 0) { cur = 0; start = 0; }
+  else if (f - start >= 32) {
+    int n;
+    do n = random(IDLE_COUNT); while (n == cur);
+    cur = n; start = f;
+  }
+  IDLE_FACES[cur](f - start);
 }
 void faceListen(int f) {
   fill(12, 7, 6, 8); fill(30, 7, 6, 8);
