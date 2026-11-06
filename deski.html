@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Deski Companion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow white column; the robot's black screen is the only dark object on the page, coral heart is the accent */
+:root {
+  --paper: #ffffff;
+  --ink: #16181d;
+  --muted: #5d636e;
+  --line: #e6e8ec;
+  --shell: #eceef1;
+  --screen: #0e0f12;
+  --heart: #f0715a;
+  --ok: #2f9e6a;
+  --world: #4a5bd6;
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.55;
+  padding-inline: 20px;
+  padding-block: 0 64px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 88px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+p { margin: 0; }
+.eyebrow {
+  font-family: var(--mono); font-size: 12px; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--muted);
+}
+section > header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 32px; max-width: 60ch; }
+h2 { font-size: clamp(26px, 4vw, 34px); font-weight: 700; }
+section > header p { color: var(--muted); }
+
+/* Hero */
+.hero {
+  display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 40px; align-items: center;
+  padding-top: 56px; border-bottom: 1px solid var(--line); padding-bottom: 56px;
+}
+.hero .text { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.hero h1 { font-size: clamp(44px, 8vw, 80px); font-weight: 700; line-height: 0.95; }
+.hero h1 span { color: var(--heart); }
+.hero .lede { font-size: 19px; color: var(--muted); max-width: 46ch; }
+.vision { font-family: var(--display); font-size: 20px; font-weight: 500; line-height: 1.35; color: var(--ink); max-width: 44ch; padding-left: 14px; border-left: 3px solid var(--heart); }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag { font-family: var(--mono); font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; color: var(--ink); }
+.hero .art { display: flex; justify-content: center; }
+.hero .art svg { width: 100%; max-width: 340px; height: auto; }
+
+/* Faces */
+.faces { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px 24px; }
+.face { display: flex; flex-direction: column; gap: 10px; }
+.face .px { background: var(--shell); border-radius: 14px; padding: 10px; }
+.face .px svg { width: 100%; height: auto; display: block; border-radius: 6px; }
+.face h3 { font-size: 17px; font-weight: 500; }
+.face p { font-size: 14px; color: var(--muted); line-height: 1.4; }
+
+/* Features */
+.features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); }
+.feature { padding: 24px 22px 26px 22px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--line); min-width: 0; }
+.feature:nth-child(3n+1) { padding-left: 0; }
+.feature:not(:nth-child(3n+1)) { border-left: 1px solid var(--line); }
+.feature svg { width: 36px; height: 36px; }
+.feature h3 { font-size: 20px; font-weight: 700; }
+.feature p { font-size: 15px; color: var(--muted); }
+.feature .say { font-family: var(--mono); font-size: 12.5px; color: var(--ink); background: var(--shell); border-radius: 8px; padding: 8px 10px; line-height: 1.45; margin-top: auto; }
+
+/* Partners */
+.partners { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.col { border: 1px solid var(--line); border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; }
+.col .pic { background: var(--shell); aspect-ratio: 16 / 10; max-width: 100%; display: flex; align-items: center; justify-content: center; }
+.col .pic svg { width: 78%; height: auto; }
+.col .body { padding: 22px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+.col h3 { font-size: 22px; font-weight: 700; }
+.col .role { color: var(--muted); font-size: 15px; }
+.opt { display: flex; flex-direction: column; gap: 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+.opt .name { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.opt strong { font-family: var(--display); font-size: 19px; font-weight: 500; }
+.pill { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.pick { background: var(--ink); color: var(--paper); }
+.pill.alt { border: 1px solid var(--line); color: var(--muted); }
+.opt p { font-size: 14.5px; color: var(--muted); }
+.opt code { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
+.note { margin-top: 24px; font-size: 14px; color: var(--muted); max-width: 70ch; }
+
+footer { border-top: 1px solid var(--line); padding-top: 20px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+
+/* Flow: one lean diagram, scrolls sideways on phones */
+.flowbox { overflow-x: auto; border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
+.flowbox svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.flowbox .node { fill: var(--paper); stroke: var(--ink); stroke-width: 1.5; }
+.flowbox .node.core { fill: var(--ink); }
+.flowbox .node.store { stroke: var(--ok); }
+.flowbox .node.pay { stroke: var(--heart); }
+.flowbox .node.world { stroke: var(--world); }
+.flowbox .node.stop { stroke: var(--heart); stroke-dasharray: 5 4; }
+.flowbox .t { font-family: var(--body); font-size: 15px; font-weight: 600; fill: var(--ink); }
+.flowbox .s { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+.flowbox .lane { font-family: var(--mono); font-size: 11px; fill: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+.flowbox .core-t { fill: var(--paper); }
+.flowbox .core-s { fill: #c9cdd2; }
+.flowbox .ln { stroke: var(--ink); stroke-width: 1.5; fill: none; }
+.flowbox .ln.dash { stroke-dasharray: 5 4; }
+.flowbox .hd { fill: var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 16px; font-size: 13.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.legend i { display: inline-block; width: 18px; height: 12px; border-radius: 4px; border: 1.5px solid var(--ink); background: var(--paper); }
+.legend i.core { background: var(--ink); }
+.legend i.store { border-color: var(--ok); }
+.legend i.pay { border-color: var(--heart); }
+.legend i.world { border-color: var(--world); }
+.legend i.stop { border-color: var(--heart); border-style: dashed; }
+
+@media (max-width: 900px) {
+  .partners { grid-template-columns: 1fr; }
+  .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .feature:nth-child(3n+1) { padding-left: 22px; }
+  .feature:not(:nth-child(3n+1)) { border-left: 0; }
+  .feature:nth-child(odd) { padding-left: 0; }
+  .feature:nth-child(even) { border-left: 1px solid var(--line); }
+}
+@media (max-width: 720px) {
+  .hero { grid-template-columns: 1fr; padding-top: 36px; }
+  .hero .art { order: -1; }
+  .hero .art svg { max-width: 240px; }
+  .faces { gap: 24px 12px; }
+  .face .px { padding: 6px; border-radius: 10px; }
+  .features { grid-template-columns: 1fr; }
+  .feature, .feature:nth-child(n) { padding-left: 0; padding-right: 0; border-left: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- Header -->
+  <section class="hero">
+    <div class="text">
+      <span class="eyebrow">ETHGlobal Mumbai 2026 · Hardware track</span>
+      <h1>Deski<span>.</span></h1>
+      <p class="lede">A small desk robot that keeps you focused, with your own stake on the line. It's a Tamagotchi style wellness desk companion.</p>
+      <div class="tags">
+        <span class="tag">Screen</span><span class="tag">Speaker</span><span class="tag">Microphone</span><span class="tag">Camera</span><span class="tag">Wi-Fi</span><span class="tag">Push to talk</span>
+      </div>
+      <p class="vision">Physical AI is next. Deski sees you, decides on 0G whether you're focused, and settles the result on Hedera.</p>
+    </div>
+    <div class="art" aria-hidden="true">
+      <svg viewBox="0 0 300 320" xmlns="http://www.w3.org/2000/svg">
+        <!-- base -->
+        <rect x="80" y="262" width="140" height="36" rx="10" fill="#9aa0a8"/>
+        <rect x="70" y="282" width="160" height="22" rx="8" fill="#7f858d"/>
+        <rect x="118" y="232" width="64" height="38" rx="8" fill="#c9cdd2"/>
+        <!-- body -->
+        <rect x="40" y="30" width="220" height="210" rx="30" fill="#e4e6e9"/>
+        <rect x="40" y="30" width="220" height="210" rx="30" fill="none" stroke="#cfd2d6" stroke-width="2"/>
+        <!-- camera -->
+        <circle cx="243" cy="62" r="7" fill="#0e0f12"/>
+        <circle cx="243" cy="62" r="3" fill="#3a3d44"/>
+        <!-- speaker holes -->
+        <g fill="#c4c8cd">
+          <circle cx="208" cy="219" r="2.5"/><circle cx="218" cy="219" r="2.5"/><circle cx="228" cy="219" r="2.5"/><circle cx="238" cy="219" r="2.5"/>
+          <circle cx="213" cy="228" r="2.5"/><circle cx="223" cy="228" r="2.5"/><circle cx="233" cy="228" r="2.5"/>
+        </g>
+        <!-- screen bezel + screen -->
+        <rect x="56" y="48" width="170" height="160" rx="18" fill="#0e0f12"/>
+        <g id="hero-screen" transform="translate(69 74) scale(3)"></g>
+        <circle cx="141" cy="194" r="5" fill="none" stroke="#3a3d44" stroke-width="2"/>
+      </svg>
+    </div>
+  </section>
+
+  <!-- Faces -->
+  <section>
+    <header>
+      <span class="eyebrow">Screens</span>
+      <h2>Nine faces on one screen</h2>
+      <p>Deski has a 48 × 32 pixel face. Idle, it cycles through nine little animations. During a focus session it switches to a calm green face with the countdown underneath.</p>
+    </header>
+    <div class="faces">
+      <div class="face"><div class="px" data-screen="idle"></div><h3>Idle</h3><p>Blinks, looks around and hums while it waits.</p></div>
+      <div class="face"><div class="px" data-screen="listening"></div><h3>Listening</h3><p>You're holding the button and talking.</p></div>
+      <div class="face"><div class="px" data-screen="thinking"></div><h3>Thinking</h3><p>0G is working out the reply.</p></div>
+      <div class="face"><div class="px" data-screen="happy"></div><h3>Happy</h3><p>The reply was tagged happy, or a stake went through.</p></div>
+      <div class="face"><div class="px" data-screen="sad"></div><h3>Sad</h3><p>You lost focus, or a tool call failed.</p></div>
+      <div class="face"><div class="px" data-screen="offline"></div><h3>0G offline</h3><p>No answer from 0G. Deski says so and pauses the timer.</p></div>
+      <div class="face"><div class="px" data-screen="focus"></div><h3>Focus</h3><p>Session running, with the minutes left underneath.</p></div>
+      <div class="face"><div class="px" data-screen="exercise"></div><h3>Exercise</h3><p>Time's up. Do three neck rotations to win the stake back.</p></div>
+      <div class="face"><div class="px" data-screen="slashed"></div><h3>Slashed</h3><p>You lost focus twice. The stake is gone.</p></div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section>
+    <header>
+      <span class="eyebrow">What it does</span>
+      <h2>Six things Deski can do</h2>
+    </header>
+    <div class="features">
+      <div class="feature">
+        <svg viewBox="0 0 36 36" fill="none" stroke="#16181d" stroke-width="2" stroke-linejoin="round"><path d="M5 8h26v16H15l-7 6v-6H5z"/></svg>
+        <h3>Talk and chat</h3>
+        <p>Hold the button, talk, let go. 0G turns your speech into text and writes the reply. Deski says it out loud and types it on the screen.</p>
+        <span class="say">"What should I focus on today?"</span>
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 36 36" fill="none" stroke="#16181d" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="20" r="12"/><path d="M18 20v-6M14 4h8M18 4v4"/></svg>
+        <h3>Focus sessions</h3>
+        <p>Ask for a session and the backend stakes ATTN on Hedera. If you don't give a length, the session lasts 2 minutes.</p>
+        <span class="say">"Stake 2 ATTN for 25 minutes."</span>
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 36 36" fill="none" stroke="#16181d" stroke-width="2" stroke-linejoin="round"><rect x="4" y="10" width="28" height="19" rx="4"/><circle cx="18" cy="19.5" r="5.5"/><path d="M12 10l2-4h8l2 4"/></svg>
+        <h3>Camera checks</h3>
+        <p>Every 10 seconds Deski takes a photo. 0G vision describes it, and a second 0G call decides if you're focused.</p>
+        <span class="say">"User is looking at their phone."</span>
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 36 36" fill="none" stroke="#16181d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 4l14 26H4z"/><path d="M18 14v7"/><circle cx="18" cy="25.5" r="0.8" fill="#16181d"/></svg>
+        <h3>Warn, then slash</h3>
+        <p>The first miss gets a warning and a neck exercise. A second miss slashes the stake, and the session ends.</p>
+        <span class="say">"We have slashed your stake. 1 ATTN invested"</span>
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 36 36" fill="none" stroke="#16181d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="8" r="4"/><path d="M18 12v10M10 17l8-2 8 2M13 32l5-10 5 10"/></svg>
+        <h3>Win it back</h3>
+        <p>When time is up, Deski asks for three slow neck rotations and takes three photos. If 0G sees you do it, the stake comes back.</p>
+        <span class="say">"Unstaked 1 ATTN. Focus session ended."</span>
+      </div>
+      <div class="feature">
+        <svg viewBox="0 0 36 36" fill="none" stroke="#16181d" stroke-width="2" stroke-linejoin="round"><path d="M4 18l9-12h19v24H13z"/><circle cx="12" cy="18" r="2"/></svg>
+        <h3>ENS names</h3>
+        <p>Ask about any .eth name. The backend looks it up on the ENS subgraph and hands back the site link.</p>
+        <span class="say">"Look up vitalik.eth" → vitalik.eth.limo</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Partners -->
+  <section>
+    <header>
+      <span class="eyebrow">Hackathon partners</span>
+      <h2>How it thinks, how it stakes, who it finds</h2>
+      <p>Three partners, each covering one part of Deski. Items marked Live run in the current build.</p>
+    </header>
+    <div class="partners">
+
+      <article class="col">
+        <div class="pic" aria-hidden="true">
+          <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+            <rect x="80" y="30" width="80" height="80" rx="12" fill="#0e0f12"/>
+            <g stroke="#9aa0a8" stroke-width="3" stroke-linecap="round">
+              <path d="M98 22v8M120 22v8M142 22v8M98 110v8M120 110v8M142 110v8M72 50h8M72 70h8M72 90h8M160 50h8M160 70h8M160 90h8"/>
+            </g>
+            <path d="M104 72c0-10 8-16 16-16s16 6 16 16-8 16-16 16" stroke="#f0715a" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <circle cx="120" cy="72" r="4" fill="#fff"/>
+            <g fill="none" stroke="#16181d" stroke-width="2">
+              <ellipse cx="200" cy="60" rx="18" ry="6"/><path d="M182 60v24c0 3 8 6 18 6s18-3 18-6V60"/><path d="M182 72c0 3 8 6 18 6s18-3 18-6"/>
+            </g>
+            <path d="M168 70h12" stroke="#16181d" stroke-width="2" stroke-dasharray="3 3"/>
+            <rect x="18" y="54" width="44" height="34" rx="6" fill="#fff" stroke="#16181d" stroke-width="2"/>
+            <circle cx="40" cy="71" r="9" fill="none" stroke="#16181d" stroke-width="2"/>
+            <circle cx="40" cy="71" r="3.5" fill="#16181d"/>
+            <path d="M62 70h10" stroke="#16181d" stroke-width="2" stroke-dasharray="3 3"/>
+            <text x="200" y="110" text-anchor="middle" font-family="monospace" font-size="9" fill="#5d636e">request ids</text>
+          </svg>
+        </div>
+        <div class="body">
+          <span class="eyebrow">Intelligence partner</span>
+          <h3>How it thinks</h3>
+          <p class="role">Every model call goes to 0G, and there is no fallback. If 0G doesn't answer, Deski says so and decides nothing.</p>
+          <div class="opt">
+            <div class="name"><strong>0G Compute</strong><span class="pill pick">Live</span></div>
+            <p>Whisper for speech, the 0G chat model for replies, vision for camera photos, and the backend's tool decision. Each call runs in a TEE and is checked with <code>verify_tee</code>.</p>
+          </div>
+          <div class="opt">
+            <div class="name"><strong>0G Storage</strong><span class="pill pick">Live</span></div>
+            <p>Every <code>/tool</code> decision is logged in the background with two 0G request ids: the device's call and the backend's decision.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="col">
+        <div class="pic" aria-hidden="true">
+          <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+            <rect x="20" y="34" width="80" height="80" rx="14" fill="#e4e6e9" stroke="#cfd2d6" stroke-width="2"/>
+            <rect x="28" y="42" width="64" height="56" rx="7" fill="#0e0f12"/>
+            <rect x="42" y="60" width="9" height="7" fill="#3ccf8e"/><rect x="69" y="60" width="9" height="7" fill="#3ccf8e"/>
+            <rect x="40" y="55" width="13" height="2" fill="#3ccf8e"/><rect x="67" y="55" width="13" height="2" fill="#3ccf8e"/>
+            <rect x="55" y="80" width="10" height="2" fill="#3ccf8e"/>
+            <path d="M110 74h52" stroke="#16181d" stroke-width="2" stroke-dasharray="3 3"/>
+            <path d="M160 68l8 6-8 6" stroke="#16181d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="198" cy="74" r="24" fill="#fff" stroke="#f0715a" stroke-width="3"/>
+            <text x="198" y="78" text-anchor="middle" font-family="monospace" font-size="11" font-weight="bold" fill="#16181d">ATTN</text>
+            <rect x="186" y="98" width="24" height="18" rx="4" fill="#16181d"/>
+            <path d="M191 98v-5a7 7 0 0 1 14 0v5" fill="none" stroke="#16181d" stroke-width="2.5"/>
+            <text x="136" y="104" text-anchor="middle" font-family="monospace" font-size="10" fill="#5d636e">mint + freeze</text>
+          </svg>
+        </div>
+        <div class="body">
+          <span class="eyebrow">Economy partner</span>
+          <h3>How it stakes</h3>
+          <p class="role">The stake is an ATTN token on Hedera testnet, managed with Stablecoin Studio.</p>
+          <div class="opt">
+            <div class="name"><strong>Stake</strong><span class="pill pick">Live</span></div>
+            <p>Mint ATTN to your account, then freeze it so it can't move during the session. Each stake mints 1 ATTN for now.</p>
+          </div>
+          <div class="opt">
+            <div class="name"><strong>Unstake and slash</strong><span class="pill pick">Live</span></div>
+            <p>Both unfreeze and wipe the ATTN. Unstake ends the session cleanly, and slash is what happens after the second lost focus.</p>
+          </div>
+          <div class="opt">
+            <div class="name"><strong>USDC in, USDC back</strong><span class="pill alt">Next</span></div>
+            <p>The USDC transfer is written but switched off until the test account has testnet USDC.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="col">
+        <div class="pic" aria-hidden="true">
+          <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+            <path d="M24 75l18-24h66v48H42z" fill="#fff" stroke="#16181d" stroke-width="2" stroke-linejoin="round"/>
+            <circle cx="42" cy="75" r="4" fill="#4a5bd6"/>
+            <text x="78" y="79" text-anchor="middle" font-family="monospace" font-size="11" fill="#16181d">name.eth</text>
+            <path d="M114 75h30" stroke="#16181d" stroke-width="2" stroke-dasharray="3 3"/>
+            <path d="M142 69l8 6-8 6" stroke="#16181d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="156" y="40" width="68" height="70" rx="8" fill="#fff" stroke="#16181d" stroke-width="2"/>
+            <path d="M156 56h68" stroke="#16181d" stroke-width="2"/>
+            <circle cx="165" cy="48" r="2" fill="#f0715a"/><circle cx="172" cy="48" r="2" fill="#cfd2d6"/><circle cx="179" cy="48" r="2" fill="#cfd2d6"/>
+            <rect x="166" y="66" width="48" height="5" rx="2.5" fill="#cfd2d6"/>
+            <rect x="166" y="77" width="36" height="5" rx="2.5" fill="#cfd2d6"/>
+            <text x="190" y="100" text-anchor="middle" font-family="monospace" font-size="9" fill="#4a5bd6">.limo</text>
+          </svg>
+        </div>
+        <div class="body">
+          <span class="eyebrow">Identity partner</span>
+          <h3>Who it finds</h3>
+          <p class="role">Deski can look up ENS names out loud, so a spoken name turns into a link you can open.</p>
+          <div class="opt">
+            <div class="name"><strong>ENS subgraph</strong><span class="pill pick">Live</span></div>
+            <p>The backend checks the name on the ENS subgraph. If the lookup itself fails, it tells you to try again instead of saying the name doesn't exist.</p>
+          </div>
+          <div class="opt">
+            <div class="name"><strong>eth.limo link</strong><span class="pill pick">Live</span></div>
+            <p>A found name comes back as <code>https://name.eth.limo</code>.</p>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- Flow -->
+  <section>
+    <header>
+      <span class="eyebrow">Decision loop</span>
+      <h2>How a focus session runs</h2>
+      <p>Voice turns and camera checks both end up at the backend's <code>/tool</code> endpoint. There, one 0G call picks the action, Hedera settles it, and the decision is logged on 0G Storage.</p>
+    </header>
+    <div class="flowbox"><svg viewBox="0 0 1030 704" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Voice turn: hold to talk, 0G Whisper turns speech into text, 0G chat writes the reply and mood, ElevenLabs speaks it, Deski talks. Camera check every 10 seconds: a photo goes to 0G vision, which describes the user. Both the voice turn and the camera description go to the backend's POST /tool, where a 0G call decides the tool. Each decision is logged on 0G Storage with the client and decision request ids. If 0G gives no answer, a safe stop pauses the timer and retries in 15 seconds. The tools are stake (mint and freeze ATTN on Hedera), unstake (unfreeze and wipe), ENS lookup (eth.limo link), and attention. Attention results: focused, keep going; first miss, a neck exercise warning; second miss, the stake is slashed on Hedera. When time is up, Deski takes three exercise photos, 0G vision checks them, and if they pass the stake comes back.">
+      <g transform="translate(20 30)">
+        <!-- lane labels -->
+        <text class="lane" x="0" y="-10">Voice turn</text>
+        <text class="lane" x="0" y="100">Camera check · every 10 s</text>
+
+        <!-- row 1: voice -->
+        <rect class="node" x="0" y="0" width="130" height="56" rx="12"/>
+        <text class="t" x="65" y="24" text-anchor="middle">Hold to talk</text>
+        <text class="s" x="65" y="42" text-anchor="middle">push button</text>
+        <path class="ln" d="M130 28H153"/><path class="hd" d="M160 28l-8-4.5v9z"/>
+        <rect class="node" x="160" y="0" width="160" height="56" rx="12"/>
+        <text class="t" x="240" y="24" text-anchor="middle">0G Whisper</text>
+        <text class="s" x="240" y="42" text-anchor="middle">speech to text</text>
+        <path class="ln" d="M320 28H343"/><path class="hd" d="M350 28l-8-4.5v9z"/>
+        <rect class="node" x="350" y="0" width="170" height="56" rx="12"/>
+        <text class="t" x="435" y="24" text-anchor="middle">0G chat</text>
+        <text class="s" x="435" y="42" text-anchor="middle">reply + mood tag</text>
+        <path class="ln" d="M520 28H543"/><path class="hd" d="M550 28l-8-4.5v9z"/>
+        <rect class="node" x="550" y="0" width="160" height="56" rx="12"/>
+        <text class="t" x="630" y="24" text-anchor="middle">ElevenLabs</text>
+        <text class="s" x="630" y="42" text-anchor="middle">text to speech</text>
+        <path class="ln" d="M710 28H733"/><path class="hd" d="M740 28l-8-4.5v9z"/>
+        <rect class="node" x="740" y="0" width="250" height="56" rx="12"/>
+        <text class="t" x="865" y="24" text-anchor="middle">Deski speaks</text>
+        <text class="s" x="865" y="42" text-anchor="middle">voice + typed text + face</text>
+
+        <!-- row 2: camera -->
+        <rect class="node" x="0" y="110" width="130" height="56" rx="12"/>
+        <text class="t" x="65" y="134" text-anchor="middle">Camera</text>
+        <text class="s" x="65" y="152" text-anchor="middle">one photo</text>
+        <path class="ln" d="M130 138H153"/><path class="hd" d="M160 138l-8-4.5v9z"/>
+        <rect class="node" x="160" y="110" width="160" height="56" rx="12"/>
+        <text class="t" x="240" y="134" text-anchor="middle">0G vision</text>
+        <text class="s" x="240" y="152" text-anchor="middle">describes the user</text>
+
+        <!-- into /tool -->
+        <path class="ln" d="M435 56V203"/><path class="hd" d="M435 210l-4.5-8h9z"/>
+        <text class="s" x="445" y="128">user_text + ai_res</text>
+        <path class="ln" d="M320 138H380V203"/><path class="hd" d="M380 210l-4.5-8h9z"/>
+        <text class="s" x="240" y="186" text-anchor="middle">user_text "img"</text>
+
+        <!-- safe stop -->
+        <path class="ln dash" d="M600 210V138H733"/><path class="hd" d="M740 138l-8-4.5v9z"/>
+        <text class="s" x="610" y="128">no answer from 0G</text>
+        <rect class="node stop" x="740" y="110" width="250" height="56" rx="12"/>
+        <text class="t" x="865" y="134" text-anchor="middle">Safe stop</text>
+        <text class="s" x="865" y="152" text-anchor="middle">timer paused · retry in 15 s</text>
+
+        <!-- row 3: backend -->
+        <rect class="node core" x="350" y="210" width="300" height="56" rx="12"/>
+        <text class="t core-t" x="500" y="234" text-anchor="middle">POST /tool · 0G decides</text>
+        <text class="s core-s" x="500" y="252" text-anchor="middle">one tool call · TEE verified</text>
+        <path class="ln" d="M650 238H733"/><path class="hd" d="M740 238l-8-4.5v9z"/>
+        <rect class="node store" x="740" y="210" width="250" height="56" rx="12"/>
+        <text class="t" x="865" y="234" text-anchor="middle">0G Storage log</text>
+        <text class="s" x="865" y="252" text-anchor="middle">client + decision request ids</text>
+
+        <!-- bus to tools -->
+        <path class="ln" d="M500 266V298M114 298H876"/>
+        <path class="ln" d="M114 298V323"/><path class="hd" d="M114 330l-4.5-8h9z"/>
+        <path class="ln" d="M368 298V323"/><path class="hd" d="M368 330l-4.5-8h9z"/>
+        <path class="ln" d="M622 298V323"/><path class="hd" d="M622 330l-4.5-8h9z"/>
+        <path class="ln" d="M876 298V323"/><path class="hd" d="M876 330l-4.5-8h9z"/>
+
+        <!-- row 4: tools -->
+        <rect class="node pay" x="0" y="330" width="228" height="56" rx="12"/>
+        <text class="t" x="114" y="354" text-anchor="middle">Stake</text>
+        <text class="s" x="114" y="372" text-anchor="middle">mint + freeze ATTN · Hedera</text>
+        <rect class="node pay" x="254" y="330" width="228" height="56" rx="12"/>
+        <text class="t" x="368" y="354" text-anchor="middle">Unstake</text>
+        <text class="s" x="368" y="372" text-anchor="middle">unfreeze + wipe · Hedera</text>
+        <rect class="node world" x="508" y="330" width="228" height="56" rx="12"/>
+        <text class="t" x="622" y="354" text-anchor="middle">ENS lookup</text>
+        <text class="s" x="622" y="372" text-anchor="middle">subgraph → eth.limo link</text>
+        <rect class="node" x="762" y="330" width="228" height="56" rx="12"/>
+        <text class="t" x="876" y="354" text-anchor="middle">Attention</text>
+        <text class="s" x="876" y="372" text-anchor="middle">camera turns only</text>
+
+        <!-- attention outcomes -->
+        <path class="ln" d="M876 386V418M368 418H876"/>
+        <path class="ln" d="M368 418V443"/><path class="hd" d="M368 450l-4.5-8h9z"/>
+        <path class="ln" d="M622 418V443"/><path class="hd" d="M622 450l-4.5-8h9z"/>
+        <path class="ln" d="M876 418V443"/><path class="hd" d="M876 450l-4.5-8h9z"/>
+        <text class="lane" x="228" y="474" text-anchor="end">Attention result</text>
+        <rect class="node" x="254" y="450" width="228" height="56" rx="12"/>
+        <text class="t" x="368" y="474" text-anchor="middle">Focused</text>
+        <text class="s" x="368" y="492" text-anchor="middle">keep going</text>
+        <rect class="node" x="508" y="450" width="228" height="56" rx="12"/>
+        <text class="t" x="622" y="474" text-anchor="middle">First miss</text>
+        <text class="s" x="622" y="492" text-anchor="middle">warning + neck exercise</text>
+        <rect class="node pay" x="762" y="450" width="228" height="56" rx="12"/>
+        <text class="t" x="876" y="474" text-anchor="middle">Second miss</text>
+        <text class="s" x="876" y="492" text-anchor="middle">slash: unfreeze + wipe</text>
+
+        <!-- time up -->
+        <text class="lane" x="0" y="560">Time up</text>
+        <rect class="node" x="0" y="570" width="228" height="56" rx="12"/>
+        <text class="t" x="114" y="594" text-anchor="middle">Exercise test</text>
+        <text class="s" x="114" y="612" text-anchor="middle">three slow neck rotations</text>
+        <path class="ln" d="M228 598H247"/><path class="hd" d="M254 598l-8-4.5v9z"/>
+        <rect class="node" x="254" y="570" width="228" height="56" rx="12"/>
+        <text class="t" x="368" y="594" text-anchor="middle">Three photos</text>
+        <text class="s" x="368" y="612" text-anchor="middle">2.5 s apart</text>
+        <path class="ln" d="M482 598H501"/><path class="hd" d="M508 598l-8-4.5v9z"/>
+        <rect class="node" x="508" y="570" width="228" height="56" rx="12"/>
+        <text class="t" x="622" y="594" text-anchor="middle">0G vision</text>
+        <text class="s" x="622" y="612" text-anchor="middle">did they do it?</text>
+        <path class="ln" d="M736 598H755"/><path class="hd" d="M762 598l-8-4.5v9z"/>
+        <text class="s" x="749" y="588" text-anchor="middle">yes</text>
+        <rect class="node pay" x="762" y="570" width="228" height="56" rx="12"/>
+        <text class="t" x="876" y="594" text-anchor="middle">Stake comes back</text>
+        <text class="s" x="876" y="612" text-anchor="middle">unstake through /tool</text>
+      </g>
+    </svg></div>
+    <div class="legend">
+      <span><i class="core"></i>0G decision</span>
+      <span><i class="pay"></i>Hedera transaction</span>
+      <span><i class="store"></i>0G Storage</span>
+      <span><i class="world"></i>ENS</span>
+      <span><i class="stop"></i>Safe stop, nothing decided</span>
+    </div>
+  </section>
+
+  <footer>
+    <span class="eyebrow">Deski · desk focus robot</span>
+    <span class="eyebrow">ETHGlobal Mumbai · Nov 2026</span>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  var W = 48, H = 32;
+  var COLORS = { '#': '#ffffff', r: '#f0715a', g: '#3ccf8e', b: '#7fb4ff', o: '#ffa24c', y: '#9aa0a8' };
+  var OFF = '#1b1d22', BG = '#0e0f12';
+  var FONT = {
+    A:['010','101','111','101','101'], T:['111','010','010','010','010'], N:['110','101','101','101','101'],
+    '0':['111','101','101','101','111'], '1':['010','110','010','010','111'], '2':['111','001','111','100','111'],
+    '4':['101','101','111','001','001'], '5':['111','100','111','001','111'], '6':['111','100','111','101','111'],
+    '9':['111','101','111','001','111'], ':':['000','010','000','010','000'], '-':['000','000','111','000','000'],
+    ' ':['000','000','000','000','000']
+  };
+  function blank() { var g = []; for (var y = 0; y < H; y++) { g.push(new Array(W).fill('.')); } return g; }
+  function fill(g, x, y, w, h, c) {
+    for (var j = y; j < y + h; j++) for (var i = x; i < x + w; i++)
+      if (i >= 0 && i < W && j >= 0 && j < H) g[j][i] = c || '#';
+  }
+  function text(g, str, y, c, x) {
+    var width = str.length * 4 - 1;
+    var sx = x == null ? Math.floor((W - width) / 2) : x;
+    for (var k = 0; k < str.length; k++) {
+      var gl = FONT[str[k]] || FONT[' '];
+      for (var r = 0; r < 5; r++) for (var q = 0; q < 3; q++)
+        if (gl[r][q] === '1') fill(g, sx + k * 4 + q, y + r, 1, 1, c);
+    }
+  }
+  function heart(g, x, y) {
+    ['.rr.rr.', 'rrrrrrr', 'rrrrrrr', '.rrrrr.', '..rrr..', '...r...'].forEach(function (row, j) {
+      for (var i = 0; i < row.length; i++) if (row[i] === 'r') fill(g, x + i, y + j, 1, 1, 'r');
+    });
+  }
+  function eyes(g, y, h, c) { fill(g, 13, y, 5, h, c); fill(g, 30, y, 5, h, c); }
+  function line(g, x0, y0, x1, y1, t, c) {
+    var n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+    for (var s = 0; s <= n; s++) {
+      var x = Math.round(x0 + (x1 - x0) * s / n), y = Math.round(y0 + (y1 - y0) * s / n);
+      fill(g, x, y, t, t, c);
+    }
+  }
+  function sadFace(g) {
+    fill(g, 11, 9, 4, 2); fill(g, 15, 8, 3, 2); fill(g, 30, 8, 3, 2); fill(g, 33, 9, 4, 2);
+    eyes(g, 13, 5);
+    fill(g, 18, 26, 2, 2); fill(g, 20, 24, 2, 2); fill(g, 22, 23, 4, 2); fill(g, 26, 24, 2, 2); fill(g, 28, 26, 2, 2);
+  }
+  var screens = {
+    idle: function (g) { eyes(g, 10, 6); fill(g, 20, 22, 8, 2); },
+    listening: function (g) {
+      fill(g, 12, 7, 6, 8); fill(g, 30, 7, 6, 8);
+      [3, 6, 9, 5, 8, 3].forEach(function (h, i) { fill(g, 16 + i * 3, 29 - h, 2, h, 'r'); });
+    },
+    thinking: function (g) {
+      fill(g, 15, 8, 4, 4); fill(g, 32, 8, 4, 4);
+      fill(g, 18, 23, 4, 2); fill(g, 22, 22, 4, 2); fill(g, 26, 21, 4, 2);
+      fill(g, 37, 3, 2, 2, 'r'); fill(g, 41, 3, 2, 2, 'r'); fill(g, 45, 3, 2, 2, 'r');
+    },
+    happy: function (g) {
+      line(g, 11, 14, 15, 10, 2); line(g, 15, 10, 19, 14, 2);
+      line(g, 28, 14, 32, 10, 2); line(g, 32, 10, 36, 14, 2);
+      fill(g, 17, 20, 2, 2); fill(g, 19, 22, 2, 2); fill(g, 21, 23, 6, 2); fill(g, 27, 22, 2, 2); fill(g, 29, 20, 2, 2);
+      heart(g, 39, 2);
+    },
+    sad: function (g) { sadFace(g); fill(g, 36, 19, 2, 3, 'b'); },
+    offline: function (g) {
+      eyes(g, 12, 2, 'y'); fill(g, 19, 22, 10, 2, 'y');
+      // wifi bars, grey, with a red cross
+      fill(g, 38, 6, 2, 2, 'y'); fill(g, 41, 4, 2, 4, 'y'); fill(g, 44, 2, 2, 6, 'y');
+      line(g, 37, 1, 41, 5, 1, 'r'); line(g, 41, 1, 37, 5, 1, 'r');
+    },
+    focus: function (g) {
+      fill(g, 12, 6, 7, 1, 'g'); fill(g, 29, 6, 7, 1, 'g');
+      fill(g, 13, 9, 5, 4, 'g'); fill(g, 30, 9, 5, 4, 'g');
+      fill(g, 21, 17, 6, 1, 'g');
+      text(g, '24:59', 24, '#');
+    },
+    exercise: function (g) {
+      line(g, 11, 12, 15, 8, 2, 'o'); line(g, 15, 8, 19, 12, 2, 'o');
+      line(g, 28, 12, 32, 8, 2, 'o'); line(g, 32, 8, 36, 12, 2, 'o');
+      fill(g, 20, 16, 8, 4, 'o'); fill(g, 22, 17, 4, 2, '.');
+      text(g, '0:06', 25, '#');
+    },
+    slashed: function (g) {
+      fill(g, 11, 5, 4, 2); fill(g, 15, 4, 3, 2); fill(g, 30, 4, 3, 2); fill(g, 33, 5, 4, 2);
+      eyes(g, 9, 4);
+      fill(g, 18, 19, 2, 2); fill(g, 20, 17, 2, 2); fill(g, 22, 16, 4, 2); fill(g, 26, 17, 2, 2); fill(g, 28, 19, 2, 2);
+      text(g, '-1 ATTN', 25, 'r');
+    }
+  };
+  function cells(g) {
+    var out = '<rect width="' + W + '" height="' + H + '" fill="' + BG + '"/>';
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      var c = COLORS[g[y][x]] || OFF;
+      out += '<rect x="' + (x + 0.08) + '" y="' + (y + 0.08) + '" width="0.84" height="0.84" fill="' + c + '"/>';
+    }
+    return out;
+  }
+  function render(name) { var g = blank(); screens[name](g); return cells(g); }
+  document.querySelectorAll('[data-screen]').forEach(function (el) {
+    var name = el.getAttribute('data-screen');
+    el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" role="img" aria-label="' + name + ' screen">' + render(name) + '</svg>';
+  });
+  var hero = document.getElementById('hero-screen');
+  if (hero) hero.innerHTML = render('focus');
+})();
+</script>
+</body>
+</html>
