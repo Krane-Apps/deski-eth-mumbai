@@ -249,9 +249,9 @@ export class ToolService {
       if (r.success) {
         this.state.setStake(false);
         this.state.setExercise(false);
-        out.message = `We have slashed your stake. ${r.attnRemoved} ATTN removed.`;
+        out.message = `We have slashed your stake. ${r.attnRemoved} ATTN invested`;
       } else {
-        out.message = 'Could not slash your stake.';
+        out.message = 'Could not slash your stake atm';
       }
     }
     this.logger.log(`attention lost: ${out.message} state=${JSON.stringify(this.state.get())}`);
