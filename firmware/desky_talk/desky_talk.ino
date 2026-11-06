@@ -511,7 +511,7 @@ String chat(const char* tag, JsonDocument& req) {
   serializeJson(req, body);
   uint32_t t = millis();
   int code = post(tag, String(ZG_URL) + "/chat/completions", "Authorization", String("Bearer ") + ZG_KEY,
-                  (uint8_t*)body.c_str(), body.length(), &resp, nullptr, "application/json", 1, 15000);
+                  (uint8_t*)body.c_str(), body.length(), &resp, nullptr, "application/json", 1, 25000);   // 0G is sometimes slow; under 25 s is not "offline"
   JsonDocument doc;
   String answer;
   if (code == 200 && !deserializeJson(doc, resp)) answer = doc["choices"][0]["message"]["content"] | "";
