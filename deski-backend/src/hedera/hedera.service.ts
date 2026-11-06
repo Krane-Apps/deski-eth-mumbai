@@ -7,6 +7,7 @@ import {
   SupportedWallets,
   CashInRequest,
   FreezeAccountRequest,
+  WipeRequest,
 } from '@hashgraph/stablecoin-npm-sdk';
 import { Client, PrivateKey, TokenId, AccountId, TransferTransaction, Status } from '@hiero-ledger/sdk';
 
@@ -147,5 +148,16 @@ export class HederaService implements OnModuleInit, OnModuleDestroy {
 
   async freeze(targetId: string): Promise<string> {
     return txId('freeze', await StableCoin.freeze(new FreezeAccountRequest({ targetId, tokenId: this.tokenId })));
+  }
+
+  async unfreeze(targetId: string): Promise<string> {
+    return txId('unFreeze', await StableCoin.unFreeze(new FreezeAccountRequest({ targetId, tokenId: this.tokenId })));
+  }
+
+  async wipeAttn(targetId: string, amount: number): Promise<string> {
+    return txId(
+      'wipe',
+      await StableCoin.wipe(new WipeRequest({ targetId, tokenId: this.tokenId, amount: String(amount) })),
+    );
   }
 }

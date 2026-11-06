@@ -14,8 +14,11 @@ export class StakeController {
         if (!result.success) throw new HttpException(result, 500);
         return result;
       }
-      case 'unstake':
-        throw new HttpException({ success: false, message: 'unstake is not implemented yet' }, 400);
+      case 'unstake': {
+        const result = await this.stakeService.unstake();
+        if (!result.success) throw new HttpException(result, 500);
+        return result;
+      }
       default:
         throw new HttpException({ success: false, message: "action must be 'stake' or 'unstake'" }, 400);
     }
