@@ -29,9 +29,11 @@ export class StakeService {
       const result: StakeResult = { success: false, usdcStaked: 0, attnReceived: 0 };
       let step = 'transferUsdc';
       try {
-        const usdcTx = await this.hedera.transferUsdc(testId, env('TEST_PRIVATE_KEY'), adminId, USDC_AMOUNT);
-        result.usdcStaked = USDC_AMOUNT;
-        this.logTx(step, usdcTx);
+        // TODO: re-enable once the test account has testnet USDC.
+        // const usdcTx = await this.hedera.transferUsdc(testId, env('TEST_PRIVATE_KEY'), adminId, USDC_AMOUNT);
+        // result.usdcStaked = USDC_AMOUNT;
+        // this.logTx(step, usdcTx);
+        void adminId;
 
         step = 'mintAttn';
         const mintTx = await this.hedera.mintAttn(testId, ATTN_AMOUNT);
@@ -63,10 +65,12 @@ export class StakeService {
         result.attnRemoved = ATTN_AMOUNT;
         this.logTx(step, wipeTx);
 
-        step = 'returnUsdc';
-        const usdcTx = await this.hedera.transferUsdc(adminId, env('MY_PRIVATE_KEY'), testId, USDC_AMOUNT);
-        result.usdcReturned = USDC_AMOUNT;
-        this.logTx(step, usdcTx);
+        // TODO: re-enable once the test account has testnet USDC.
+        // step = 'returnUsdc';
+        // const usdcTx = await this.hedera.transferUsdc(adminId, env('MY_PRIVATE_KEY'), testId, USDC_AMOUNT);
+        // result.usdcReturned = USDC_AMOUNT;
+        // this.logTx(step, usdcTx);
+        void adminId;
 
         result.success = true;
       } catch (err: any) {
