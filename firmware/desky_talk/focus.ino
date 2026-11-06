@@ -109,7 +109,7 @@ String photo() {
   return url;
 }
 
-// asks 0G's vision model (openrouter as fallback) a question about one or more photos
+// asks 0G's vision model a question about one or more photos (no fallback model)
 String vision(const char* question, const String* photos, int count) {
   JsonDocument req;
   req["max_tokens"] = 100;
@@ -124,7 +124,7 @@ String vision(const char* question, const String* photos, int count) {
     im["type"] = "image_url"; im["image_url"]["url"] = photos[i];
   }
   // 0G only: focus decisions never fall back to another model ("" = 0G offline, caller safe-stops)
-  String answer = chat("VISION", true, req);
+  String answer = chat("VISION", req);
   LOG("VISION", "\"%s\"", answer.c_str());
   return answer;
 }

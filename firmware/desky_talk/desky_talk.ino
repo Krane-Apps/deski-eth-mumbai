@@ -17,17 +17,15 @@
 #include <time.h>
 #include "esp_camera.h"
 #include "esp_http_server.h"
-#include "secrets.h"   // WIFI_NAME, WIFI_PASSWORD, ZG_KEY, OPENROUTER_KEY, ELEVENLABS_KEY, BACKEND_URL
+#include "secrets.h"   // WIFI_NAME, WIFI_PASSWORD, ZG_KEY, ELEVENLABS_KEY, BACKEND_URL
 
 // ================= settings =================
 #define LAYOUT 2   // 1: the old wiring. 2: the compact build from the guide
 
-// 0G compute router answers first; openrouter is the fallback when 0G fails
+// 0G compute router does all speech to text, chat and vision. no fallback model: if 0G fails, desky says so
 const char* ZG_URL        = "https://router-api.0g.ai/v1";
 const char* ZG_STT_MODEL  = "whisper-large-v3";    // runs sealed in a TEE (TeeML)
 const char* ZG_CHAT_MODEL = "0gm-1.0-35b-a3b";     // 0G's own model, TeeML
-const char* STT_MODEL  = "openai/whisper-1";
-const char* CHAT_MODEL = "openai/gpt-4o-mini";
 const char* VOICE_ID   = "JBFqnCBsd6RMkjVDRZzb";
 const char* TTS_MODEL  = "eleven_flash_v2_5";
 const char* PERSONA =
@@ -440,8 +438,7 @@ int post(const char* tag, const String& url, const char* keyHeader, const String
   return -1;
 }
 
-const char* sttBy = "-";
-const char* chatBy = "-";
+bool zgDown = false;   // the last 0G call failed: desky says 0G is offline (no other model takes over)
 
 // logs the 0G request id and provider, the proof of which TEE machine answered
 void logTrace(const char* tag, const char* model, uint32_t ms, JsonDocument& doc) {
@@ -474,38 +471,15 @@ String speechToText0G(size_t wavLen) {
   String words;
   if (code == 200 && !deserializeJson(doc, resp)) { words = doc["text"] | ""; words.trim(); }
   if (words.length()) logTrace("STT", ZG_STT_MODEL, millis() - t, doc);
-  else LOG("STT", "0G failed (http %d: %.120s), trying OpenRouter", code, resp.c_str());
+  else LOG("STT", "0G failed (http %d: %.120s)", code, resp.c_str());
+  zgDown = code != 200;
   return words;
 }
 
 String speechToText(size_t samples) {
   wavHeader(samples);
-  size_t wavLen = 44 + samples * 2, b64 = 4 * ((wavLen + 2) / 3);
-  String zg = speechToText0G(wavLen);
-  if (zg.length()) { sttBy = "0G"; LOG("STT", "you said: \"%s\"", zg.c_str()); return zg; }
-  char head[128];
-  snprintf(head, sizeof(head), "{\"model\":\"%s\",\"language\":\"en\",\"input_audio\":{\"format\":\"wav\",\"data\":\"", STT_MODEL);
-  size_t hl = strlen(head);
-  char* body = (char*)ps_malloc(hl + b64 + 8);
-  if (!body) { LOG("STT", "no memory"); return ""; }
-  memcpy(body, head, hl);
-  size_t used = 0;
-  mbedtls_base64_encode((uint8_t*)body + hl, b64 + 1, &used, wavBuf, wavLen);
-  strcpy(body + hl + used, "\"}}");
-  String resp;
-  uint32_t t = millis();
-  int code = post("STT", "https://openrouter.ai/api/v1/audio/transcriptions", "Authorization",
-                  String("Bearer ") + OPENROUTER_KEY, (uint8_t*)body, strlen(body), &resp);
-  free(body);
-  LOG("STT", "http %d in %lu ms", code, millis() - t);
-  if (code != 200) { LOG("STT", "server said: %s", resp.c_str()); return ""; }
-  JsonDocument doc;
-  if (deserializeJson(doc, resp)) return "";
-  String words = doc["text"] | "";
-  words.trim();
-  sttBy = "OpenRouter";
-  LOG("STT", "used OpenRouter %s", STT_MODEL);
-  LOG("STT", "you said: \"%s\"", words.c_str());
+  String words = speechToText0G(44 + samples * 2);
+  if (words.length()) LOG("STT", "you said: \"%s\"", words.c_str());
   return words;
 }
 
@@ -526,27 +500,24 @@ void remember(const char* role, const String& t) {
   memRole[memCount] = role; memText[memCount] = t; memCount++;
 }
 
-// one chat call; returns the reply text, or "" on failure
-String chat(const char* tag, bool zg, JsonDocument& req) {
-  req["model"] = zg ? ZG_CHAT_MODEL : CHAT_MODEL;
-  if (zg) req["chat_template_kwargs"]["enable_thinking"] = false;   // thinking adds seconds of delay
-  else req.remove("chat_template_kwargs");
+// one 0G chat call; returns the reply text, or "" on failure (and sets zgDown)
+String chat(const char* tag, JsonDocument& req) {
+  req["model"] = ZG_CHAT_MODEL;
+  req["chat_template_kwargs"]["enable_thinking"] = false;   // thinking adds seconds of delay
   String body, resp;
   serializeJson(req, body);
   uint32_t t = millis();
-  int code = zg ? post(tag, String(ZG_URL) + "/chat/completions", "Authorization", String("Bearer ") + ZG_KEY,
-                       (uint8_t*)body.c_str(), body.length(), &resp, nullptr, "application/json", 1, 15000)
-                : post(tag, "https://openrouter.ai/api/v1/chat/completions", "Authorization", String("Bearer ") + OPENROUTER_KEY,
-                       (uint8_t*)body.c_str(), body.length(), &resp);
+  int code = post(tag, String(ZG_URL) + "/chat/completions", "Authorization", String("Bearer ") + ZG_KEY,
+                  (uint8_t*)body.c_str(), body.length(), &resp, nullptr, "application/json", 1, 15000);
   JsonDocument doc;
   String answer;
   if (code == 200 && !deserializeJson(doc, resp)) answer = doc["choices"][0]["message"]["content"] | "";
   int think = answer.indexOf("</think>");   // some models leak their thinking before this tag
   if (think >= 0) answer = answer.substring(think + 8);
   answer.trim();
-  if (!answer.length()) { LOG(tag, "%s failed (http %d: %.120s)", zg ? "0G" : "OpenRouter", code, resp.c_str()); return ""; }
-  if (zg) logTrace(tag, ZG_CHAT_MODEL, millis() - t, doc);
-  else LOG(tag, "used OpenRouter %s in %lu ms", CHAT_MODEL, millis() - t);
+  zgDown = !answer.length();
+  if (zgDown) { LOG(tag, "0G failed (http %d: %.120s)", code, resp.c_str()); return ""; }
+  logTrace(tag, ZG_CHAT_MODEL, millis() - t, doc);
   return answer;
 }
 
@@ -557,9 +528,7 @@ String reply(const String& said) {
   JsonObject sys = m.add<JsonObject>(); sys["role"] = "system"; sys["content"] = String(PERSONA) + nowText();
   for (int i = 0; i < memCount; i++) { JsonObject o = m.add<JsonObject>(); o["role"] = memRole[i]; o["content"] = memText[i]; }
   JsonObject u = m.add<JsonObject>(); u["role"] = "user"; u["content"] = said;
-  String answer = chat("CHAT", true, req);
-  chatBy = "0G";
-  if (!answer.length()) { LOG("CHAT", "trying OpenRouter"); answer = chat("CHAT", false, req); chatBy = "OpenRouter"; }
+  String answer = chat("CHAT", req);
   if (answer.length()) { remember("user", said); remember("assistant", answer); }
   LOG("CHAT", "desky says: \"%s\"", answer.c_str());
   return answer;
@@ -610,6 +579,12 @@ void say(const String& words, int mood) {
   delay(1200);
   if (mood != S_IDLE) { state = mood; delay(1500); }
   state = S_IDLE;
+}
+
+// 0G is down: say so and show it, never ask another model
+void zgOfflineSay() {
+  LOG("FAIL", "0G is offline, no answer");
+  say("0G is offline, so I cannot think right now. Please try again in a moment.", S_SAD);
 }
 
 void oops(const char* why) {
@@ -729,11 +704,11 @@ void loop() {
   state = S_THINK;
   uint32_t t0 = millis();
   String said = speechToText(samples);
-  if (!said.length()) { oops("speech to text failed, see [STT]"); return; }
+  if (!said.length()) { if (zgDown) zgOfflineSay(); else oops("did not catch any words, see [STT]"); return; }
   String answer = reply(said);
-  if (!answer.length()) { oops("reply failed, see [CHAT]"); return; }
+  if (!answer.length()) { zgOfflineSay(); return; }
   int mood = splitMood(answer);
-  LOG("USED", "stt=%s chat=%s, %lu ms after you let go", sttBy, chatBy, millis() - t0);
+  LOG("USED", "stt=0G chat=0G tts=ElevenLabs, %lu ms after you let go", millis() - t0);
   say(answer, mood);
   focusAfterTurn(said, answer);   // the backend decides if this turn stakes or unstakes
 }
