@@ -140,8 +140,10 @@ bool askBackend(const String& userText, const String& aiRes, String& tool, Strin
   String body, resp;
   serializeJson(req, body);
   uint32_t t = millis();
-  int code = post("TOOL", String(BACKEND_URL) + "/tool", "Accept", "application/json",
-                  (uint8_t*)body.c_str(), body.length(), &resp, nullptr, "application/json", 1, 20000);
+  // the skip header stops ngrok's free tier from answering with its browser warning page.
+  // a stake takes about 15 s (hedera mint and freeze), so wait up to 45 s
+  int code = post("TOOL", String(BACKEND_URL) + "/tool", "ngrok-skip-browser-warning", "1",
+                  (uint8_t*)body.c_str(), body.length(), &resp, nullptr, "application/json", 1, 45000);
   JsonDocument doc;
   if (code != 200 || deserializeJson(doc, resp)) { LOG("TOOL", "backend failed (http %d: %.120s)", code, resp.c_str()); return false; }
   tool = doc["tool"] | "";
