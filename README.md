@@ -2,7 +2,7 @@
 
 Deski is a small desk robot that keeps you focused, with your own money on the line. Built at ETHGlobal Mumbai 2026.
 
-You tell Deski what you will work on and stake a little USDC. Its camera checks on you during the session, and an AI model decides if you are focused. Finish the session and your stake comes back. Lose focus and Deski does not punish you: it buys Bitcoin with the stake and locks it for you for 5 years.
+You tell Deski what you will work on and stake a little USDC. Its camera checks on you during the session, and an AI model decides if you are focused. Finish the session and your stake comes back. Lose focus once and Deski asks you to do a neck exercise. Lose focus again and your stake is slashed.
 
 ## Status
 
@@ -12,8 +12,7 @@ You tell Deski what you will work on and stake a little USDC. Its camera checks 
 | Voice: hold the button, talk, Deski replies out loud and on screen | Working (`firmware/desky_talk`) |
 | Pixel characters | Working (`firmware/desky_pets`) |
 | Focus sessions judged by 0G sealed inference, episode log on 0G Storage | In progress |
-| Stake vault: stake back, or Bitcoin bought on Uniswap and locked for 5 years | In progress |
-| Owner approval with World ID before any stake | In progress |
+| Stake on Hedera: ATTN token managed with Stablecoin Studio (mint, freeze, wipe) | Working (`deski-backend`) |
 
 ## Hardware
 
