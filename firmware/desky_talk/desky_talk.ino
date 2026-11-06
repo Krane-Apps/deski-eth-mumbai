@@ -25,6 +25,7 @@ const char* VOICE_ID   = "JBFqnCBsd6RMkjVDRZzb";
 const char* TTS_MODEL  = "eleven_flash_v2_5";
 const char* PERSONA =
   "You are Desky, a small cheerful robot that lives on the user's desk and helps them stay focused. "
+  "Always answer in English, even if the user speaks another language, because the screen shows only English letters. "
   "Answer in one or two short spoken sentences. No lists, no emoji, no markdown. "
   "Begin every answer with one mood tag: [happy], [sad], [thinking] or [neutral].";
 
@@ -78,26 +79,78 @@ size_t   voiceMax;
 uint8_t* replyBuf;    // spoken reply from ElevenLabs (16 kHz, 16-bit)
 size_t   replyMax;
 
-// ============ face: desky's pixel character ============
-const char* DESKY[16] = {
-  ".......##.......", ".......##.......", "........#.......", "..############..",
-  "..#..........#..", "..#..........#..", "..#..........#..", "..#..........#..",
-  "..#..........#..", "..#..........#..", "..#..........#..", "..############..",
-  "......#..#......", ".....##..##.....", "................", "................",
-};
-enum Face { NEUTRAL, BLINK, HAPPY, SAD, FOCUS, DIZZY };
-const char* FACES[][5] = {
-  { "..##..##..", "..##..##..", "..........", "...####...", ".........." },
-  { "..........", "..##..##..", "..........", "...####...", ".........." },
-  { "..#....#..", ".#.#..#.#.", "..........", "..#....#..", "...####..." },
-  { "..........", "..##..##..", "..........", "...####...", "..#....#.." },
-  { ".###..###.", "..##..##..", "..........", "...####...", ".........." },
-  { ".#.#..#.#.", "..#....#..", ".#.#..#.#.", "..........", "...####..." },
-};
+// ============ face: colour pixel expressions on a 48 x 32 grid ============
+enum State { S_IDLE, S_LISTEN, S_THINK, S_TALK, S_HAPPY, S_SAD };
+volatile int state = S_THINK;
 
-enum State { S_IDLE, S_LISTEN, S_THINK, S_TALK, S_HAPPY, S_SAD, S_OFFLINE };
-volatile int state = S_IDLE;
-uint16_t BG, INK, UNLIT;
+const int GW = 48, GH = 32;
+enum { OFF = 0, WHT, RED, PNK, YEL, CYN, GRN, BLU, ORG, PUR, GRY };
+uint16_t PAL[11];
+uint8_t grid[GH][GW];
+
+// some st7735 screens swap red and blue; if the hearts look blue, set this to true
+const bool SWAP_RB = false;
+uint16_t rgb(uint8_t r, uint8_t g, uint8_t b) { return SWAP_RB ? tft.color565(b, g, r) : tft.color565(r, g, b); }
+
+void fill(int x, int y, int w, int h, uint8_t c = WHT) {
+  for (int j = y; j < y + h; j++)
+    for (int i = x; i < x + w; i++)
+      if (i >= 0 && i < GW && j >= 0 && j < GH) grid[j][i] = c;
+}
+void line(int x0, int y0, int x1, int y1, int t, uint8_t c) {
+  int n = max(abs(x1 - x0), abs(y1 - y0));
+  for (int s = 0; s <= n; s++)
+    fill(round(x0 + (x1 - x0) * (float)s / n), round(y0 + (y1 - y0) * (float)s / n), t, t, c);
+}
+void heart(int x, int y) {
+  const char* rows[6] = { ".rr.rr.", "rrrrrrr", "rrrrrrr", ".rrrrr.", "..rrr..", "...r..." };
+  for (int j = 0; j < 6; j++) for (int i = 0; i < 7; i++) if (rows[j][i] == 'r') fill(x + i, y + j, 1, 1, RED);
+}
+
+void faceIdle(int f) {
+  if (f % 20 == 15 || f % 20 == 16) { fill(13, 15, 5, 1, CYN); fill(30, 15, 5, 1, CYN); }
+  else { fill(13, 10, 5, 6, CYN); fill(30, 10, 5, 6, CYN); }
+  fill(20, 22, 8, 2, CYN);
+}
+void faceListen(int f) {
+  fill(12, 7, 6, 8); fill(30, 7, 6, 8);
+  const int base[6] = { 3, 6, 9, 5, 8, 3 };
+  const uint8_t col[6] = { PNK, ORG, YEL, GRN, CYN, PUR };
+  for (int i = 0; i < 6; i++) { int h = base[(i + f) % 6]; fill(16 + i * 3, 29 - h, 2, h, col[i]); }
+}
+void faceThink(int f) {
+  fill(15, 8, 4, 4, YEL); fill(32, 8, 4, 4, YEL);
+  fill(18, 23, 4, 2, YEL); fill(22, 22, 4, 2, YEL); fill(26, 21, 4, 2, YEL);
+  for (int i = 0; i < f % 4; i++) fill(37 + i * 4, 3, 2, 2, ORG);
+}
+void faceHappy(int f) {
+  line(11, 14, 15, 10, 2, YEL); line(15, 10, 19, 14, 2, YEL);
+  line(28, 14, 32, 10, 2, YEL); line(32, 10, 36, 14, 2, YEL);
+  fill(17, 20, 2, 2, YEL); fill(19, 22, 2, 2, YEL); fill(21, 23, 6, 2, YEL); fill(27, 22, 2, 2, YEL); fill(29, 20, 2, 2, YEL);
+  if (f % 6 < 4) heart(39, 2);
+}
+void faceSad(int f) {
+  fill(11, 9, 4, 2, BLU); fill(15, 8, 3, 2, BLU); fill(30, 8, 3, 2, BLU); fill(33, 9, 4, 2, BLU);
+  fill(13, 13, 5, 5, BLU); fill(30, 13, 5, 5, BLU);
+  fill(18, 26, 2, 2, BLU); fill(20, 24, 2, 2, BLU); fill(22, 23, 4, 2, BLU); fill(26, 24, 2, 2, BLU); fill(28, 26, 2, 2, BLU);
+  int ty = 19 + (f % 9); if (ty <= 28) fill(36, ty, 2, 3, CYN);
+}
+
+void drawGrid() {
+  for (int y = 0; y < GH; y++)
+    for (int x = 0; x < GW; x++)
+      if (grid[y][x]) {
+        int x0 = x * 160 / GW, x1 = (x + 1) * 160 / GW, y0 = y * 128 / GH, y1 = (y + 1) * 128 / GH;
+        canvas->fillRect(x0, y0, x1 - x0, y1 - y0, PAL[grid[y][x]]);
+      }
+}
+
+// top right: green bars when connected, grey bars with a red cross when not
+void wifiIcon(bool up) {
+  const int h[4] = { 2, 3, 5, 7 };
+  for (int i = 0; i < 4; i++) canvas->fillRect(147 + i * 3, 8 - h[i], 2, h[i], PAL[up ? GRN : GRY]);
+  if (!up) { canvas->drawLine(147, 0, 154, 7, PAL[RED]); canvas->drawLine(154, 0, 147, 7, PAL[RED]); }
+}
 
 // reply text, typed out while desky speaks
 char sayText[400];
@@ -105,57 +158,44 @@ char lines[12][27];
 volatile int lineCount = 0, textSize = 2, totalChars = 0;
 volatile uint32_t typeStart = 0, msPerChar = 45;
 
-void drawDesky(int face, int dy) {
-  const int X = 40, Y = 4, CELL = 5;
-  for (int y = 0; y < 16; y++)
-    for (int x = 0; x < 16; x++) {
-      bool on = DESKY[y][x] == '#';
-      int fy = y - 5, fx = x - 3;
-      if (fy >= 0 && fy < 5 && fx >= 0 && fx < 10 && FACES[face][fy][fx] == '#') on = true;
-      canvas->fillRect(X + x * CELL, Y + (y + dy) * CELL, CELL - 1, CELL - 1, on ? INK : UNLIT);
-    }
-}
-
-void label(const char* big, const char* small) {
-  canvas->setTextColor(INK);
-  canvas->setTextSize(2);
-  canvas->setCursor((160 - (int)strlen(big) * 12) / 2, 92);
-  canvas->print(big);
-  canvas->setTextSize(1);
-  canvas->setCursor((160 - (int)strlen(small) * 6) / 2, 114);
-  canvas->print(small);
-}
-
-void drawTyped() {
-  int cw = 6 * textSize, lh = 8 * textSize + 3;
+void drawTyped(int f) {
+  int cw = 6 * textSize, lh = 8 * textSize + 2, y0 = textSize == 2 ? 20 : 16;
   int due = (millis() - typeStart) / msPerChar + 1, k = 0;
-  canvas->setTextColor(INK);
+  canvas->setTextColor(PAL[WHT]);
   canvas->setTextSize(textSize);
   for (int i = 0; i < lineCount && k < due; i++)
     for (int j = 0; lines[i][j] && k < due; j++, k++) {
-      canvas->setCursor(4 + j * cw, 6 + i * lh);
+      canvas->setCursor(4 + j * cw, y0 + i * lh);
       canvas->print(lines[i][j]);
     }
+  // small pink mouth, top left: moves while letters are still coming
+  if (k < totalChars && (f / 3) % 2) { canvas->fillRect(4, 3, 16, 10, PAL[PNK]); canvas->fillRect(7, 6, 10, 4, PAL[OFF]); }
+  else canvas->fillRect(4, 7, 16, 3, PAL[PNK]);
 }
 
 // owns the screen; runs on its own core so the face keeps moving during web calls
 void faceTask(void*) {
-  for (int f = 0;; f++) {
-    canvas->fillScreen(BG);
-    bool wifi = WiFi.status() == WL_CONNECTED;
+  int f = 0, last = -1;
+  for (;;) {
     int s = state;
-    if (s == S_IDLE && !wifi) s = S_OFFLINE;
-    switch (s) {
-      case S_IDLE:    drawDesky(f % 20 >= 18 ? BLINK : NEUTRAL, (f / 4) % 2); label("DESKY", "hold the button to talk"); break;
-      case S_LISTEN:  drawDesky(FOCUS, 0); label("LISTENING", (f / 3) % 2 ? "let go when done" : ""); break;
-      case S_THINK:   drawDesky(FOCUS, (f / 2) % 2); label(f % 4 == 0 ? "THINKING" : f % 4 == 1 ? "THINKING." : f % 4 == 2 ? "THINKING.." : "THINKING...", ""); break;
-      case S_TALK:    drawTyped(); break;
-      case S_HAPPY:   drawDesky(HAPPY, (f / 3) % 2); label(":)", ""); break;
-      case S_SAD:     drawDesky(SAD, 0); label("OOPS", "something failed, see Serial"); break;
-      case S_OFFLINE: drawDesky(DIZZY, 0); label("NO WIFI", WIFI_NAME); break;
+    if (s != last) { f = 0; last = s; }
+    canvas->fillScreen(PAL[OFF]);
+    if (s == S_TALK) drawTyped(f);
+    else {
+      memset(grid, OFF, sizeof(grid));
+      switch (s) {
+        case S_IDLE:   faceIdle(f);   break;
+        case S_LISTEN: faceListen(f); break;
+        case S_THINK:  faceThink(f);  break;
+        case S_HAPPY:  faceHappy(f);  break;
+        case S_SAD:    faceSad(f);    break;
+      }
+      drawGrid();
     }
+    wifiIcon(WiFi.status() == WL_CONNECTED);
     tft.drawRGBBitmap(0, 0, canvas->getBuffer(), 160, 128);
-    vTaskDelay(pdMS_TO_TICKS(s == S_TALK ? 40 : 150));
+    f++;
+    vTaskDelay(pdMS_TO_TICKS(s == S_TALK ? 40 : 130));
   }
 }
 
@@ -188,7 +228,7 @@ void prepareText(const String& s, uint32_t audioMs) {
   }
   sayText[o] = 0;
   textSize = 2;
-  if (!wrapInto(13, 6)) { textSize = 1; wrapInto(26, 12); }
+  if (!wrapInto(12, 6)) { textSize = 1; wrapInto(25, 11); }
   msPerChar = (audioMs && totalChars) ? max(15UL, (unsigned long)(audioMs * 9 / 10 / totalChars)) : 45;
   typeStart = millis();
 }
@@ -277,7 +317,7 @@ String speechToText(size_t samples) {
   wavHeader(samples);
   size_t wavLen = 44 + samples * 2, b64 = 4 * ((wavLen + 2) / 3);
   char head[128];
-  snprintf(head, sizeof(head), "{\"model\":\"%s\",\"input_audio\":{\"format\":\"wav\",\"data\":\"", STT_MODEL);
+  snprintf(head, sizeof(head), "{\"model\":\"%s\",\"language\":\"en\",\"input_audio\":{\"format\":\"wav\",\"data\":\"", STT_MODEL);
   size_t hl = strlen(head);
   char* body = (char*)ps_malloc(hl + b64 + 8);
   if (!body) { LOG("STT", "no memory"); return ""; }
@@ -364,7 +404,8 @@ int splitMood(String& s) {
     if (e > 0) {
       String tag = s.substring(1, e); tag.toLowerCase();
       if (tag == "sad") mood = S_SAD;
-      else if (tag == "thinking" || tag == "neutral") mood = S_IDLE;
+      else if (tag == "thinking") mood = S_THINK;
+      else if (tag == "neutral") mood = S_IDLE;
       s = s.substring(e + 1); s.trim();
     }
   }
@@ -412,7 +453,12 @@ void setup() {
   SPI.begin(TFT_SCLK, -1, TFT_MOSI, TFT_CS);
   tft.initR(INITR_BLACKTAB);
   tft.setRotation(1);
-  BG = tft.color565(196, 207, 161); UNLIT = tft.color565(184, 196, 150); INK = tft.color565(38, 46, 32);
+  PAL[OFF] = 0;                    PAL[WHT] = rgb(255, 255, 255);
+  PAL[RED] = rgb(255, 0, 0);       PAL[PNK] = rgb(255, 90, 170);
+  PAL[YEL] = rgb(255, 220, 40);    PAL[CYN] = rgb(40, 230, 255);
+  PAL[GRN] = rgb(60, 235, 120);    PAL[BLU] = rgb(70, 140, 255);
+  PAL[ORG] = rgb(255, 140, 30);    PAL[PUR] = rgb(170, 90, 255);
+  PAL[GRY] = rgb(70, 72, 80);
   canvas = new GFXcanvas16(160, 128);
 
   voiceMax = RATE * MAX_TALK_S;
@@ -452,9 +498,15 @@ void setup() {
 }
 
 void loop() {
+  // hotspot off at boot: scan again every 20 s, so the curly-apostrophe name is found when it comes on
+  static uint32_t lastTry = millis();
+  if (WiFi.status() != WL_CONNECTED && millis() - lastTry > 20000) {
+    lastTry = millis();
+    String ssid = findNetwork();
+    WiFi.begin(ssid.c_str(), WIFI_PASSWORD);
+  }
   if (digitalRead(BTN) != LOW) { delay(10); return; }
   if (WiFi.status() != WL_CONNECTED) {
-    WiFi.reconnect();
     oops("no wifi yet");
     while (digitalRead(BTN) == LOW) delay(10);
     return;
