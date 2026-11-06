@@ -118,6 +118,11 @@ function respond(tool: ToolName | null, success = false, usdcStaked = 0, attnRec
 /** No tool ran (or the request failed before a decision): no message. */
 export const failed = (): ToolResponse => respond(null);
 
+/** Filled in by the 0G call so the caller can log the router's request id; never part of the reply. */
+export interface OgTrace {
+  requestId: string | null;
+}
+
 const isPositive = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
 // stake numbers may be left out ("start focus session"); defaults are 1 ATTN for 2 minutes
 const optionalPositive = (v: unknown): boolean => v === undefined || isPositive(v);
@@ -144,10 +149,10 @@ export class ToolService {
     }));
   }
 
-  async decide(userText: string, aiRes: string): Promise<ToolResponse> {
-    if (userText.trim().toLowerCase() === 'img') return this.checkAttention(userText, aiRes);
+  async decide(userText: string, aiRes: string, trace: OgTrace = { requestId: null }): Promise<ToolResponse> {
+    if (userText.trim().toLowerCase() === 'img') return this.checkAttention(userText, aiRes, trace);
 
-    const res = await this.callOg(TEXT_CALL, userText, aiRes);
+    const res = await this.callOg(TEXT_CALL, userText, aiRes, trace);
     const reqId = (res as any).x_0g_trace?.request_id ?? res.id;
 
     // Only the first tool call is used; any others are ignored.
@@ -214,8 +219,8 @@ export class ToolService {
    * success = attentive. If the model gives no usable answer we return tool: null rather than
    * guessing "not attentive".
    */
-  private async checkAttention(userText: string, aiRes: string): Promise<ToolResponse> {
-    const res = await this.callOg(IMAGE_CALL, userText, aiRes);
+  private async checkAttention(userText: string, aiRes: string, trace: OgTrace): Promise<ToolResponse> {
+    const res = await this.callOg(IMAGE_CALL, userText, aiRes, trace);
     const reqId = (res as any).x_0g_trace?.request_id ?? res.id;
 
     const call = res.choices[0]?.message?.tool_calls?.[0];
@@ -258,9 +263,15 @@ export class ToolService {
     return out;
   }
 
-  private async callOg(call: OgCall, userText: string, aiRes: string): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  /** Calls 0G and records the router's request id (x_0g_trace.request_id, or the X-Request-ID header on errors) in `trace`. */
+  private async callOg(
+    call: OgCall,
+    userText: string,
+    aiRes: string,
+    trace: OgTrace,
+  ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
     try {
-      return await this.og().chat.completions.create({
+      const res = await this.og().chat.completions.create({
         model: env('OG_CHAT_MODEL'),
         tool_choice: call.toolChoice,
         tools: call.tools,
@@ -271,7 +282,10 @@ export class ToolService {
           { role: 'assistant', content: aiRes },
         ],
       } as any);
+      trace.requestId = (res as any).x_0g_trace?.request_id ?? null;
+      return res;
     } catch (err) {
+      if (err instanceof APIError) trace.requestId = err.headers?.get('x-request-id') ?? null;
       // Never guess a tool decision when 0G fails: surface the error instead.
       if (err instanceof APIConnectionError) {
         // Includes APIConnectionTimeoutError (the 20s timeout).
