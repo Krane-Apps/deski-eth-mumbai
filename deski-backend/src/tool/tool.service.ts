@@ -36,11 +36,34 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
 ];
 
+type ToolName = 'stake' | 'unstake';
+
+/**
+ * Same shape for every response (see docs/tool-api.html). For unstake, the amounts are
+ * what was returned/removed. `message` is only present when a tool was called.
+ */
 export interface ToolResponse {
-  tool: 'stake' | 'unstake' | null;
-  args: Record<string, unknown> | null;
-  result: object | null;
+  tool: ToolName | null;
+  success: boolean;
+  usdcStaked: number;
+  attnReceived: number;
+  message?: string;
 }
+
+const MESSAGES: Record<ToolName, { ok: (attn: number) => string; fail: string }> = {
+  stake: { ok: (attn) => `Staked ${attn} ATTN. Focus session started.`, fail: 'Could not start the focus session.' },
+  unstake: { ok: (attn) => `Unstaked ${attn} ATTN. Focus session ended.`, fail: 'Could not end the focus session.' },
+};
+
+/** Builds a response; adds `message` whenever a tool was called. */
+function respond(tool: ToolName | null, success = false, usdcStaked = 0, attnReceived = 0): ToolResponse {
+  const res: ToolResponse = { tool, success, usdcStaked, attnReceived };
+  if (tool) res.message = success ? MESSAGES[tool].ok(attnReceived) : MESSAGES[tool].fail;
+  return res;
+}
+
+/** No tool ran (or the request failed before a decision): no message. */
+export const failed = (): ToolResponse => respond(null);
 
 const isPositive = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
 
@@ -70,13 +93,13 @@ export class ToolService {
     const call = res.choices[0]?.message?.tool_calls?.[0];
     if (!call || call.type !== 'function') {
       this.logger.log(`[0g ${reqId}] no tool`);
-      return { tool: null, args: null, result: null };
+      return failed();
     }
 
     const name = call.function.name;
     if (name !== 'stake' && name !== 'unstake') {
       this.logger.warn(`[0g ${reqId}] model called unknown tool "${name}", ignoring`);
-      return { tool: null, args: null, result: null };
+      return failed();
     }
 
     let args: Record<string, unknown> | null = null;
@@ -90,13 +113,17 @@ export class ToolService {
     const valid = name === 'stake' ? !!args && isPositive(args.amount) && isPositive(args.minutes) : !!args;
     if (!valid) {
       this.logger.warn(`[0g ${reqId}] ${name} invalid args: ${call.function.arguments}`);
-      return { tool: name, args, result: { ok: false, error: 'invalid_args' } };
+      return respond(name);
     }
 
     this.logger.log(`[0g ${reqId}] ${name} ${JSON.stringify(args)}`);
     // StakeService still uses a fixed 1 ATTN; amount/minutes are not applied on-chain yet.
-    const result = name === 'stake' ? await this.stakeService.stake() : await this.stakeService.unstake();
-    return { tool: name, args, result };
+    if (name === 'stake') {
+      const r = await this.stakeService.stake();
+      return respond(name, r.success, r.usdcStaked, r.attnReceived);
+    }
+    const r = await this.stakeService.unstake();
+    return respond(name, r.success, r.usdcReturned, r.attnRemoved);
   }
 
   private async callOg(userText: string, aiRes: string): Promise<OpenAI.Chat.Completions.ChatCompletion> {
@@ -117,21 +144,23 @@ export class ToolService {
       if (err instanceof APIConnectionError) {
         // Includes APIConnectionTimeoutError (the 10s timeout).
         this.logger.error(`0G unreachable: ${err.message}`);
-        throw new HttpException({ error: 'og_unavailable' }, 503);
+        throw new HttpException(failed(), 503);
       }
       if (err instanceof BadRequestError) {
         this.logger.error(`0G returned 400, model doesn't support tool calling: ${err.message}`);
-        throw new HttpException({ error: 'og_bad_request' }, 502);
+        throw new HttpException(failed(), 502);
       }
       if (err instanceof APIError && (err.status ?? 0) >= 500) {
         this.logger.error(`0G server error ${err.status}: ${err.message}`);
-        throw new HttpException({ error: 'og_unavailable' }, 503);
+        throw new HttpException(failed(), 503);
       }
       if (err instanceof APIError) {
         this.logger.error(`0G error ${err.status}: ${err.message}`);
-        throw new HttpException({ error: 'og_error' }, 502);
+        throw new HttpException(failed(), 502);
       }
-      throw err;
+      // e.g. a missing OG_* env var
+      this.logger.error(`0G call failed: ${(err as Error)?.message ?? err}`);
+      throw new HttpException(failed(), 500);
     }
   }
 }
