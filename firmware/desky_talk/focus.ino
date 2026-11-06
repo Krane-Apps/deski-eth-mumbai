@@ -147,8 +147,6 @@ bool askBackend(const String& userText, const String& aiRes, String& tool, Strin
   tool = doc["tool"] | "";
   message = doc["message"] | "";
   bool ok = doc["success"] | false;
-  const char* root = doc["episodeRoot"] | "";
-  if (*root) LOG("EPISODE", "session log saved on 0G Storage, root %s", root);
   LOG("TOOL", "tool=%s success=%s message=\"%s\" in %lu ms", tool.length() ? tool.c_str() : "none",
       ok ? "yes" : "no", message.c_str(), (unsigned long)(millis() - t));
   return ok;

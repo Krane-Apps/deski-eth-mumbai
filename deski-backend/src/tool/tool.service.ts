@@ -4,7 +4,6 @@ import { EnsService } from '../ens/ens.service';
 import { env } from '../hedera/hedera.service';
 import { StakeService } from '../stake/stake.service';
 import { StateService } from '../state/state.service';
-import { EpisodeService } from '../episode/episode.service';
 
 const SYSTEM_PROMPT =
   'You decide if Deski should stake or unstake ATTN based on the conversation. ' +
@@ -99,7 +98,6 @@ export interface ToolResponse {
   usdcStaked: number;
   attnReceived: number;
   message?: string;
-  episodeRoot?: string; // 0G Storage root hash of the session log, when a session ends
 }
 
 const MESSAGES: Record<ToolName, { ok: (attn: number) => string; fail: string }> = {
@@ -131,11 +129,7 @@ export class ToolService {
     private readonly stakeService: StakeService,
     private readonly state: StateService,
     private readonly ens: EnsService,
-    private readonly episode: EpisodeService,
   ) {}
-
-  // trace of the last 0G call, for the episode log (one user, so one request at a time)
-  private lastTrace: { requestId: string; provider?: string } = { requestId: '' };
 
   // Created lazily so a missing OG_* var fails the request, not the server boot.
   // 10s timeout and no retries, so a 0G outage fails fast with a 503.
@@ -148,19 +142,7 @@ export class ToolService {
     }));
   }
 
-  /** Every 0G decision inside a focus session goes into the episode log; the log is saved when the session ends. */
   async decide(userText: string, aiRes: string): Promise<ToolResponse> {
-    const before = this.state.get().stake;
-    const out = await this.decideOnce(userText, aiRes);
-    const after = this.state.get().stake;
-    if (!before && after) this.episode.start();
-    const decision = out.tool === 'attention' ? `attention attentive=${out.success}` : (out.tool ?? 'none');
-    this.episode.record({ decision, ...this.lastTrace, userText, aiRes, result: out.message });
-    if (before && !after) out.episodeRoot = await this.episode.finish(out.tool === 'unstake' ? 'unstaked' : 'slashed');
-    return out;
-  }
-
-  private async decideOnce(userText: string, aiRes: string): Promise<ToolResponse> {
     if (userText.trim().toLowerCase() === 'img') return this.checkAttention(userText, aiRes);
 
     const res = await this.callOg(TEXT_CALL, userText, aiRes);
@@ -276,8 +258,7 @@ export class ToolService {
 
   private async callOg(call: OgCall, userText: string, aiRes: string): Promise<OpenAI.Chat.Completions.ChatCompletion> {
     try {
-      this.lastTrace = { requestId: '' };
-      const res = await this.og().chat.completions.create({
+      return await this.og().chat.completions.create({
         model: env('OG_CHAT_MODEL'),
         tool_choice: call.toolChoice,
         tools: call.tools,
@@ -288,9 +269,6 @@ export class ToolService {
           { role: 'assistant', content: aiRes },
         ],
       } as any);
-      const trace = (res as any).x_0g_trace;
-      this.lastTrace = { requestId: trace?.request_id ?? res.id, provider: trace?.provider };
-      return res;
     } catch (err) {
       // Never guess a tool decision when 0G fails: surface the error instead.
       if (err instanceof APIConnectionError) {
