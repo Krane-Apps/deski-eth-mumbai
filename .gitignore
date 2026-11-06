@@ -1,0 +1,3 @@
+# keys and passwords stay on this machine
+firmware/**/secrets.h
+server/.env
