@@ -2,6 +2,7 @@ import { HttpException, Injectable, Logger } from '@nestjs/common';
 import OpenAI, { APIConnectionError, APIError, BadRequestError } from 'openai';
 import { env } from '../hedera/hedera.service';
 import { StakeService } from '../stake/stake.service';
+import { StateService } from '../state/state.service';
 
 const SYSTEM_PROMPT =
   'You decide if Deski should stake or unstake ATTN based on the conversation. ' +
@@ -107,7 +108,10 @@ export class ToolService {
   private readonly logger = new Logger(ToolService.name);
   private client?: OpenAI;
 
-  constructor(private readonly stakeService: StakeService) {}
+  constructor(
+    private readonly stakeService: StakeService,
+    private readonly state: StateService,
+  ) {}
 
   // Created lazily so a missing OG_* var fails the request, not the server boot.
   // 10s timeout and no retries, so a 0G outage fails fast with a 503.
@@ -157,9 +161,14 @@ export class ToolService {
     // StakeService still uses a fixed 1 ATTN; amount/minutes are not applied on-chain yet.
     if (name === 'stake') {
       const r = await this.stakeService.stake();
+      if (r.success) this.state.setStake(true);
       return respond(name, r.success, r.usdcStaked, r.attnReceived);
     }
     const r = await this.stakeService.unstake();
+    if (r.success) {
+      this.state.setStake(false);
+      this.state.setExercise(false);
+    }
     return respond(name, r.success, r.usdcReturned, r.attnRemoved);
   }
 
@@ -187,7 +196,18 @@ export class ToolService {
     }
 
     this.logger.log(`[0g ${reqId}] attention attentive=${attentive}`);
-    return respond('attention', attentive);
+    if (attentive) return respond('attention', true);
+
+    // Lost attention: first warn with an exercise, then slash if it happens again.
+    const out = respond('attention', false);
+    if (!this.state.get().exercise) {
+      this.state.setExercise(true);
+      out.message = 'Need more focus, do neck exercise.';
+    } else {
+      out.message = 'We have slashed your stake and invested it.';
+    }
+    this.logger.log(`attention lost: ${out.message} state=${JSON.stringify(this.state.get())}`);
+    return out;
   }
 
   private async callOg(call: OgCall, userText: string, aiRes: string): Promise<OpenAI.Chat.Completions.ChatCompletion> {
