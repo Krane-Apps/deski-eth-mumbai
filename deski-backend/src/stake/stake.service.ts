@@ -80,6 +80,28 @@ export class StakeService {
     });
   }
 
+  /** Penalty for losing attention: unfreeze + wipe ATTN. The staked USDC is kept (no return, no investment yet). */
+  slash(): Promise<UnstakeResult> {
+    return this.hedera.exclusive(async () => {
+      const { testId } = this.hedera;
+      const result: UnstakeResult = { success: false, usdcReturned: 0, attnRemoved: 0 };
+      let step = 'unfreeze';
+      try {
+        this.logTx(step, await this.hedera.unfreeze(testId));
+
+        step = 'wipeAttn';
+        const wipeTx = await this.hedera.wipeAttn(testId, ATTN_AMOUNT);
+        result.attnRemoved = ATTN_AMOUNT;
+        this.logTx(step, wipeTx);
+
+        result.success = true;
+      } catch (err: any) {
+        this.logFailure('slash', step, err);
+      }
+      return result;
+    });
+  }
+
   private logFailure(action: string, step: string, err: any) {
     const status = hederaStatus(err);
     this.logger.error(

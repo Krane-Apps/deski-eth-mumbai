@@ -200,11 +200,22 @@ export class ToolService {
 
     // Lost attention: first warn with an exercise, then slash if it happens again.
     const out = respond('attention', false);
-    if (!this.state.get().exercise) {
+    const { stake, exercise } = this.state.get();
+    if (!exercise || !stake) {
+      // Nothing staked means nothing to slash, so keep warning.
       this.state.setExercise(true);
       out.message = 'Need more focus, do neck exercise.';
     } else {
-      out.message = 'We have slashed your stake and invested it.';
+      // Slash = unfreeze + wipe ATTN. That ends the session, so reset the state.
+      const r = await this.stakeService.slash();
+      out.attnReceived = r.attnRemoved;
+      if (r.success) {
+        this.state.setStake(false);
+        this.state.setExercise(false);
+        out.message = `We have slashed your stake. ${r.attnRemoved} ATTN removed.`;
+      } else {
+        out.message = 'Could not slash your stake.';
+      }
     }
     this.logger.log(`attention lost: ${out.message} state=${JSON.stringify(this.state.get())}`);
     return out;
