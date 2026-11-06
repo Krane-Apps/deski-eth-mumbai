@@ -1,5 +1,6 @@
 import { HttpException, Injectable, Logger } from '@nestjs/common';
 import OpenAI, { APIConnectionError, APIError, BadRequestError } from 'openai';
+import { EnsService } from '../ens/ens.service';
 import { env } from '../hedera/hedera.service';
 import { StakeService } from '../stake/stake.service';
 import { StateService } from '../state/state.service';
@@ -8,6 +9,7 @@ const SYSTEM_PROMPT =
   'You decide if Deski should stake or unstake ATTN based on the conversation. ' +
   'Call `stake` only when the user clearly asks to start a focus attention session or stake. ' +
   'Call `unstake` only when they clearly ask to stop or end it. ' +
+  'Call `ens` when the user asks to look up or find an ENS name; pass the name they said. ' +
   'Otherwise call no tool.';
 
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -35,6 +37,19 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: { type: 'object', properties: {}, additionalProperties: false },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'ens',
+      description: 'Look up an ENS name (e.g. vitalik or vitalik.eth).',
+      parameters: {
+        type: 'object',
+        properties: { name: { type: 'string', description: 'The ENS name the user asked about' } },
+        required: ['name'],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // Image turns: user_text is "img" and ai_res is the vision AI's description of the camera frame.
@@ -58,7 +73,7 @@ const ATTENTION_TOOL: OpenAI.Chat.Completions.ChatCompletionTool = {
   },
 };
 
-type ToolName = 'stake' | 'unstake' | 'attention';
+type ToolName = 'stake' | 'unstake' | 'attention' | 'ens';
 
 interface OgCall {
   system: string;
@@ -89,6 +104,8 @@ const MESSAGES: Record<ToolName, { ok: (attn: number) => string; fail: string }>
   stake: { ok: (attn) => `Staked ${attn} ATTN. Focus session started.`, fail: 'Could not start the focus session.' },
   unstake: { ok: (attn) => `Unstaked ${attn} ATTN. Focus session ended.`, fail: 'Could not end the focus session.' },
   attention: { ok: () => 'Attention check passed.', fail: 'Attention check failed.' },
+  // ens success message is the .limo link, set in lookupEns().
+  ens: { ok: () => '', fail: 'no ens found' },
 };
 
 /** Builds a response; adds `message` whenever a tool was called. */
@@ -111,6 +128,7 @@ export class ToolService {
   constructor(
     private readonly stakeService: StakeService,
     private readonly state: StateService,
+    private readonly ens: EnsService,
   ) {}
 
   // Created lazily so a missing OG_* var fails the request, not the server boot.
@@ -138,7 +156,7 @@ export class ToolService {
     }
 
     const name = call.function.name;
-    if (name !== 'stake' && name !== 'unstake') {
+    if (name !== 'stake' && name !== 'unstake' && name !== 'ens') {
       this.logger.warn(`[0g ${reqId}] model called unknown tool "${name}", ignoring`);
       return failed();
     }
@@ -151,13 +169,20 @@ export class ToolService {
       // args stays null → invalid_args below
     }
 
-    const valid = name === 'stake' ? !!args && isPositive(args.amount) && isPositive(args.minutes) : !!args;
+    const valid =
+      name === 'stake'
+        ? !!args && isPositive(args.amount) && isPositive(args.minutes)
+        : name === 'ens'
+          ? !!args && typeof args.name === 'string' && args.name.trim().length > 0
+          : !!args;
     if (!valid) {
       this.logger.warn(`[0g ${reqId}] ${name} invalid args: ${call.function.arguments}`);
       return respond(name);
     }
 
     this.logger.log(`[0g ${reqId}] ${name} ${JSON.stringify(args)}`);
+    if (name === 'ens') return this.lookupEns(args!.name as string);
+
     // StakeService still uses a fixed 1 ATTN; amount/minutes are not applied on-chain yet.
     if (name === 'stake') {
       const r = await this.stakeService.stake();
@@ -170,6 +195,16 @@ export class ToolService {
       this.state.setExercise(false);
     }
     return respond(name, r.success, r.usdcReturned, r.attnRemoved);
+  }
+
+  /** ENS lookup: found → https://<name>.limo link; subgraph failure is reported separately from "not found". */
+  private async lookupEns(name: string): Promise<ToolResponse> {
+    const r = await this.ens.lookup(name);
+    const out = respond('ens', r.status === 'found');
+    if (r.status === 'found') out.message = `https://${r.name}.limo`;
+    else if (r.status === 'error') out.message = 'ENS lookup failed, try again.';
+    this.logger.log(`ens "${name}" → ${r.status}${r.status === 'found' ? ` ${r.name}` : ''}`);
+    return out;
   }
 
   /**

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
+import { EnsService } from './ens/ens.service';
 import { HederaService } from './hedera/hedera.service';
 import { StakeService } from './stake/stake.service';
 import { StateService } from './state/state.service';
@@ -8,6 +9,6 @@ import { ToolService } from './tool/tool.service';
 
 @Module({
   controllers: [AppController, ToolController],
-  providers: [HederaService, StakeService, StateService, ToolService],
+  providers: [EnsService, HederaService, StakeService, StateService, ToolService],
 })
 export class AppModule {}
