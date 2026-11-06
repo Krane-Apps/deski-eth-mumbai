@@ -6,6 +6,7 @@
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
 #include "esp_camera.h"
+#include "mbedtls/base64.h"
 
 // flip these if the picture is upside down or mirrored
 const bool FLIP_V   = false;
@@ -13,7 +14,7 @@ const bool MIRROR_H = true;
 
 // screen pins. LAYOUT 1: the current wiring, with 8 jumper wires to the screen.
 // LAYOUT 2: the compact two-breadboard build (guide, "Compact build").
-#define LAYOUT 1
+#define LAYOUT 2
 #if LAYOUT == 2
 #define TFT_SCLK 20   // screen SCK
 #define TFT_MOSI 21   // screen SDA
@@ -95,6 +96,19 @@ bool startCamera(pixformat_t format, framesize_t size) {
   return true;
 }
 
+// prints the jpeg as base64 between markers, so a computer on the usb cable can save it as a file
+void sendPhoto(camera_fb_t* fb) {
+  size_t len = 0;
+  mbedtls_base64_encode(nullptr, 0, &len, fb->buf, fb->len);
+  uint8_t* b64 = (uint8_t*)ps_malloc(len + 1);
+  if (!b64) return;
+  mbedtls_base64_encode(b64, len + 1, &len, fb->buf, fb->len);
+  Serial.println("PHOTO_START");
+  for (size_t i = 0; i < len; i += 76) { Serial.write(b64 + i, min((size_t)76, len - i)); Serial.println(); }
+  Serial.println("PHOTO_END");
+  free(b64);
+}
+
 // takes a few jpeg pictures at the size the real build will upload
 void jpegTest() {
   showMessage("JPEG test running", "see the Serial Monitor", ST77XX_YELLOW);
@@ -105,6 +119,7 @@ void jpegTest() {
       if (!fb) { LOG("JPEG", "FAIL: no picture"); continue; }
       LOG("JPEG", "picture %d: %ux%u, %u bytes, starts %02X %02X (FF D8 means a valid jpeg)",
           i, fb->width, fb->height, (unsigned)fb->len, fb->buf[0], fb->buf[1]);
+      if (i == 5) sendPhoto(fb);   // last one: the exposure has settled by now
       esp_camera_fb_return(fb);
       delay(300);
     }
@@ -137,7 +152,7 @@ void setup() {
     showMessage("Camera failed. Check the", "ribbon: contacts + latch", ST77XX_RED);
     while (true) delay(1000);
   }
-  tft.fillScreen(ST77XX_BLACK);
+  jpegTest();   // once at boot, so the photo reaches the computer without a button press
   LOG("BOOT", "ready. You should see the camera picture. Hold BOOT for the jpeg test.");
 }
 
