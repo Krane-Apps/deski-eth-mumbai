@@ -8,6 +8,7 @@ import { StateService } from '../state/state.service';
 const SYSTEM_PROMPT =
   'You decide if Deski should stake or unstake ATTN based on the conversation. ' +
   'Call `stake` only when the user clearly asks to start a focus attention session or stake. ' +
+  'Numbers are optional: "start focus session" alone is enough, so call `stake` without amount or minutes. ' +
   'Call `unstake` only when they clearly ask to stop or end it. ' +
   'Call `ens` when the user asks to look up or find an ENS name; pass the name they said. ' +
   'Otherwise call no tool.';
@@ -24,7 +25,6 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           amount: { type: 'number', exclusiveMinimum: 0, description: 'ATTN to stake' },
           minutes: { type: 'number', exclusiveMinimum: 0, description: 'Session length in minutes' },
         },
-        required: ['amount', 'minutes'],
         additionalProperties: false,
       },
     },
@@ -119,6 +119,8 @@ function respond(tool: ToolName | null, success = false, usdcStaked = 0, attnRec
 export const failed = (): ToolResponse => respond(null);
 
 const isPositive = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
+// stake numbers may be left out ("start focus session"); defaults are 1 ATTN for 2 minutes
+const optionalPositive = (v: unknown): boolean => v === undefined || isPositive(v);
 
 @Injectable()
 export class ToolService {
@@ -132,12 +134,12 @@ export class ToolService {
   ) {}
 
   // Created lazily so a missing OG_* var fails the request, not the server boot.
-  // 10s timeout and no retries, so a 0G outage fails fast with a 503.
+  // 20s timeout and no retries, so a 0G outage fails fast with a 503.
   private og(): OpenAI {
     return (this.client ??= new OpenAI({
       baseURL: env('OG_BASE_URL'),
       apiKey: env('OG_API_KEY'),
-      timeout: 10_000,
+      timeout: 20_000, // 0G sometimes takes over 10 s
       maxRetries: 0,
     }));
   }
@@ -171,7 +173,7 @@ export class ToolService {
 
     const valid =
       name === 'stake'
-        ? !!args && isPositive(args.amount) && isPositive(args.minutes)
+        ? !!args && optionalPositive(args.amount) && optionalPositive(args.minutes)
         : name === 'ens'
           ? !!args && typeof args.name === 'string' && args.name.trim().length > 0
           : !!args;
@@ -272,7 +274,7 @@ export class ToolService {
     } catch (err) {
       // Never guess a tool decision when 0G fails: surface the error instead.
       if (err instanceof APIConnectionError) {
-        // Includes APIConnectionTimeoutError (the 10s timeout).
+        // Includes APIConnectionTimeoutError (the 20s timeout).
         this.logger.error(`0G unreachable: ${err.message}`);
         throw new HttpException(failed(), 503);
       }
