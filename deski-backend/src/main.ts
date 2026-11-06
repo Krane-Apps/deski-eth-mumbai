@@ -1,3 +1,4 @@
+import './hedera/silence-sdk'; // must stay first: loads .env and mutes the SDK's key-leaking logs
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
