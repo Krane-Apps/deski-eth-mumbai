@@ -211,6 +211,16 @@ void focusAfterTurn(const String& said, const String& answer) {
     LOG("FOCUS", "session ended by the user: %d checks passed, %d failed", checksPassed, checksFailed);
     focusEnd = 0;
     say(msg, S_HAPPY);
+  } else if (tool == "ens") {
+    if (ok && msg.startsWith("https://")) {
+      // the laptop helper (firmware/desky-link.py) watches serial and opens this line's link in the browser
+      LOG("OPEN", "%s", msg.c_str());
+      String name = msg.substring(8);
+      if (name.endsWith(".limo")) name.remove(name.length() - 5);
+      say("I found " + name + ". Opening it on your laptop.", S_HAPPY);
+    } else {
+      say(msg.startsWith("no ens") ? String("I could not find that ENS name.") : msg, S_SAD);
+    }
   } else if (tool.length() && msg.length()) {
     say(msg, S_SAD);   // a tool ran but failed
   }

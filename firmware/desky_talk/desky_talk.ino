@@ -35,6 +35,8 @@ const char* PERSONA =
   "You cannot start, stop or stake anything yourself. A separate stake system does that and confirms it out loud. "
   "If the user asks to start or end a focus session or to stake, only say that you are checking with the stake system. "
   "Never say that a session, timer or stake has started or ended. "
+  "If the user asks you to look up or find an ENS name, only say that you are looking it up. "
+  "The stake system finds it and opens it on their laptop. "
   "Begin every answer with one mood tag: [happy], [sad], [thinking] or [neutral].";
 
 const float VOLUME    = 0.7;   // 0.1 quiet ... 1.0 loud
