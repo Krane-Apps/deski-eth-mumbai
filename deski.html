@@ -185,7 +185,7 @@ footer .mini { width: 64px; }
         </g>
         <!-- screen bezel + screen -->
         <rect x="56" y="48" width="170" height="160" rx="18" fill="#0e0f12"/>
-        <g id="hero-screen" transform="translate(69 74) scale(3)"></g>
+        <g id="hero-screen" data-screen="idle" transform="translate(69 74) scale(3)"></g>
         <circle cx="141" cy="194" r="5" fill="none" stroke="#3a3d44" stroke-width="2"/>
       </svg>
     </div>
@@ -279,10 +279,9 @@ footer .mini { width: 64px; }
               <ellipse cx="200" cy="60" rx="18" ry="6"/><path d="M182 60v24c0 3 8 6 18 6s18-3 18-6V60"/><path d="M182 72c0 3 8 6 18 6s18-3 18-6"/>
             </g>
             <path d="M168 70h12" stroke="#16181d" stroke-width="2" stroke-dasharray="3 3"/>
-            <rect x="18" y="54" width="44" height="34" rx="6" fill="#fff" stroke="#16181d" stroke-width="2"/>
-            <circle cx="40" cy="71" r="9" fill="none" stroke="#16181d" stroke-width="2"/>
-            <circle cx="40" cy="71" r="3.5" fill="#16181d"/>
-            <path d="M62 70h10" stroke="#16181d" stroke-width="2" stroke-dasharray="3 3"/>
+            <rect x="8" y="50" width="58" height="40" rx="5" fill="#0e0f12"/>
+            <g data-screen="thinking" transform="translate(13 54) scale(1.1)"></g>
+            <path d="M66 70h6" stroke="#16181d" stroke-width="2" stroke-dasharray="3 3"/>
             <text x="200" y="106" text-anchor="middle" font-size="9" fill="#5d636e">request ids</text>
           </svg>
         </div>
@@ -306,9 +305,7 @@ footer .mini { width: 64px; }
           <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
             <rect x="20" y="34" width="80" height="80" rx="14" fill="#e4e6e9" stroke="#cfd2d6" stroke-width="2"/>
             <rect x="28" y="42" width="64" height="56" rx="7" fill="#0e0f12"/>
-            <rect x="42" y="60" width="9" height="7" fill="#3ccf8e"/><rect x="69" y="60" width="9" height="7" fill="#3ccf8e"/>
-            <rect x="40" y="55" width="13" height="2" fill="#3ccf8e"/><rect x="67" y="55" width="13" height="2" fill="#3ccf8e"/>
-            <rect x="55" y="80" width="10" height="2" fill="#3ccf8e"/>
+            <g data-screen="focus" transform="translate(28 48.67) scale(1.3333)"></g>
             <path d="M110 74h52" stroke="#16181d" stroke-width="2" stroke-dasharray="3 3"/>
             <path d="M160 68l8 6-8 6" stroke="#16181d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
             <text x="139" y="94" text-anchor="middle" font-size="9" fill="#5d636e">mint + freeze</text>
@@ -341,10 +338,10 @@ footer .mini { width: 64px; }
       <article class="col">
         <div class="pic" aria-hidden="true">
           <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
-            <path d="M24 75l18-24h66v48H42z" fill="#fff" stroke="#16181d" stroke-width="2" stroke-linejoin="round"/>
-            <circle cx="42" cy="75" r="4" fill="#4a5bd6"/>
-            <text x="78" y="79" text-anchor="middle" font-size="11" fill="#16181d">name.eth</text>
-            <path d="M114 75h30" stroke="#16181d" stroke-width="2" stroke-dasharray="3 3"/>
+            <rect x="18" y="46" width="72" height="51" rx="6" fill="#0e0f12"/>
+            <g data-screen="curious" transform="translate(22 50) scale(1.3333)"></g>
+            <text x="54" y="112" text-anchor="middle" font-family="monospace" font-size="10" fill="#4a5bd6">name.eth?</text>
+            <path d="M96 75h48" stroke="#16181d" stroke-width="2" stroke-dasharray="3 3"/>
             <path d="M142 69l8 6-8 6" stroke="#16181d" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
             <rect x="156" y="40" width="68" height="70" rx="8" fill="#fff" stroke="#16181d" stroke-width="2"/>
             <path d="M156 56h68" stroke="#16181d" stroke-width="2"/>
@@ -641,14 +638,13 @@ footer .mini { width: 64px; }
   var faces = [];
   document.querySelectorAll('[data-screen]').forEach(function (el) {
     var name = el.getAttribute('data-screen');
-    el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" role="img" aria-label="' + name + ' screen">' + STATIC + '<g></g></svg>';
-    faces.push({ name: name, g: el.querySelector('g') });
+    if (el.namespaceURI === 'http://www.w3.org/2000/svg') el.innerHTML = STATIC + '<g></g>';   // a screen inside a bigger picture
+    else el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" role="img" aria-label="' + name + ' screen">' + STATIC + '<g></g></svg>';
+    faces.push({ name: name, g: el.querySelector('g'), el: el });
   });
   var hero = document.getElementById('hero-screen');
   if (hero) {
-    hero.innerHTML = STATIC + '<g></g>';
-    var bot = { name: 'idle', g: hero.querySelector('g'), at: null }, art = hero.closest('svg');
-    faces.push(bot);
+    var bot = faces.filter(function (fc) { return fc.el === hero; })[0], art = hero.closest('svg');
     document.addEventListener('pointermove', function (e) {   // the eyes follow the pointer
       var r = art.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
       bot.at = { x: Math.max(-5, Math.min(5, Math.round((e.clientX - cx) / 50))), y: Math.max(-3, Math.min(3, Math.round((e.clientY - cy) / 60))) };
