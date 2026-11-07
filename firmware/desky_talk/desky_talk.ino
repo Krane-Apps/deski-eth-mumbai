@@ -444,7 +444,10 @@ int post(const char* tag, const String& url, const char* keyHeader, const String
 bool zgDown = false;   // the last 0G call failed: desky says 0G is offline (no other model takes over)
 
 // logs the 0G request id and provider, the proof of which TEE machine answered
+String lastRequestId;   // request id of the last 0G call; sent to the backend so it can log it with the decision
+
 void logTrace(const char* tag, const char* model, uint32_t ms, JsonDocument& doc) {
+  lastRequestId = doc["x_0g_trace"]["request_id"] | "";
   LOG(tag, "used 0G %s in %lu ms, request_id %s, provider %s", model, (unsigned long)ms,
       (const char*)(doc["x_0g_trace"]["request_id"] | "?"), (const char*)(doc["x_0g_trace"]["provider"] | "?"));
 }
@@ -519,6 +522,7 @@ String chat(const char* tag, JsonDocument& req) {
   if (think >= 0) answer = answer.substring(think + 8);
   answer.trim();
   zgDown = !answer.length();
+  if (zgDown) lastRequestId = "";   // never send a stale id
   if (zgDown) { LOG(tag, "0G failed (http %d: %.120s)", code, resp.c_str()); return ""; }
   logTrace(tag, ZG_CHAT_MODEL, millis() - t, doc);
   return answer;

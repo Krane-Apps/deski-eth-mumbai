@@ -137,6 +137,7 @@ bool askBackend(const String& userText, const String& aiRes, String& tool, Strin
   JsonDocument req;
   req["user_text"] = userText;
   req["ai_res"] = aiRes;
+  if (lastRequestId.length()) req["request_id"] = lastRequestId;   // the 0G call that produced ai_res (vision or chat)
   String body, resp;
   serializeJson(req, body);
   uint32_t t = millis();
