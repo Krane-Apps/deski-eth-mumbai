@@ -295,7 +295,18 @@ void exerciseTest() {
 
 // called from loop() while nobody holds the button
 void focusTick() {
-  if (!focusOn() || WiFi.status() != WL_CONNECTED) return;
+  static uint32_t lastTick = millis();
+  uint32_t now = millis(), gap = now - lastTick;
+  lastTick = now;
+  if (!focusOn()) return;
+  if (WiFi.status() != WL_CONNECTED) {
+    // no wi-fi means 0G cannot be reached: same safe stop, the timer stands still and nothing is decided
+    if (!zgOffline) LOG("FOCUS", "SAFE STOP: wi-fi is down, so 0G cannot be reached. Timer paused");
+    zgOffline = true;
+    focusEnd += gap;
+    nextCheck = now + RETRY_MS;
+    return;
+  }
   if ((int32_t)(millis() - focusEnd) >= 0) { exerciseTest(); return; }
   if ((int32_t)(millis() - nextCheck) >= 0) {
     attentionCheck();
