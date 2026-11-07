@@ -510,7 +510,7 @@ footer { border-top: 1px solid var(--line); padding-top: 20px; display: flex; ju
   var FONT = {
     A:['010','101','111','101','101'], T:['111','010','010','010','010'], N:['110','101','101','101','101'],
     '0':['111','101','101','101','111'], '1':['010','110','010','010','111'], '2':['111','001','111','100','111'],
-    '4':['101','101','111','001','001'], '5':['111','100','111','001','111'], '6':['111','100','111','101','111'],
+    '3':['111','001','111','001','111'], '4':['101','101','111','001','001'], '5':['111','100','111','001','111'], '6':['111','100','111','101','111'], '7':['111','001','001','001','001'], '8':['111','101','111','101','111'],
     '9':['111','101','111','001','111'], ':':['000','010','000','010','000'], '-':['000','000','111','000','000'],
     ' ':['000','000','000','000','000']
   };
@@ -546,64 +546,85 @@ footer { border-top: 1px solid var(--line); padding-top: 20px; display: flex; ju
     eyes(g, 13, 5);
     fill(g, 18, 26, 2, 2); fill(g, 20, 24, 2, 2); fill(g, 22, 23, 4, 2); fill(g, 26, 24, 2, 2); fill(g, 28, 26, 2, 2);
   }
-  var screens = {
-    idle: function (g) { eyes(g, 10, 6); fill(g, 20, 22, 8, 2); },
-    listening: function (g) {
-      fill(g, 12, 7, 6, 8); fill(g, 30, 7, 6, 8);
-      [3, 6, 9, 5, 8, 3].forEach(function (h, i) { fill(g, 16 + i * 3, 29 - h, 2, h, 'r'); });
+  var screens = {   // every face takes a frame counter, one frame = 130 ms, same as the firmware
+    idle: function (g, f) {
+      var dx = f % 64 < 32 ? 0 : [-4, -4, 0, 4, 4, 0][Math.floor(f / 5) % 6];   // half the time it looks around
+      var shut = f % 20 === 15 || f % 20 === 16;
+      fill(g, 13 + dx, shut ? 15 : 10, 5, shut ? 1 : 6); fill(g, 30 + dx, shut ? 15 : 10, 5, shut ? 1 : 6);
+      fill(g, 20 + dx / 2, 22, 8, 2);
     },
-    thinking: function (g) {
+    listening: function (g, f) {
+      fill(g, 12, 7, 6, 8); fill(g, 30, 7, 6, 8);
+      var base = [3, 6, 9, 5, 8, 3];
+      for (var i = 0; i < 6; i++) { var h = base[(i + f) % 6]; fill(g, 16 + i * 3, 29 - h, 2, h, 'r'); }
+    },
+    thinking: function (g, f) {
       fill(g, 15, 8, 4, 4); fill(g, 32, 8, 4, 4);
       fill(g, 18, 23, 4, 2); fill(g, 22, 22, 4, 2); fill(g, 26, 21, 4, 2);
-      fill(g, 37, 3, 2, 2, 'r'); fill(g, 41, 3, 2, 2, 'r'); fill(g, 45, 3, 2, 2, 'r');
+      for (var i = 0; i <= f % 3; i++) fill(g, 37 + i * 4, 3, 2, 2, 'r');
     },
-    happy: function (g) {
+    happy: function (g, f) {
       line(g, 11, 14, 15, 10, 2); line(g, 15, 10, 19, 14, 2);
       line(g, 28, 14, 32, 10, 2); line(g, 32, 10, 36, 14, 2);
       fill(g, 17, 20, 2, 2); fill(g, 19, 22, 2, 2); fill(g, 21, 23, 6, 2); fill(g, 27, 22, 2, 2); fill(g, 29, 20, 2, 2);
-      heart(g, 39, 2);
+      if (f % 6 < 4) heart(g, 39, 2);
     },
-    sad: function (g) { sadFace(g); fill(g, 36, 19, 2, 3, 'b'); },
-    offline: function (g) {
+    sad: function (g, f) { sadFace(g); var ty = 19 + f % 9; if (ty <= 28) fill(g, 36, ty, 2, 3, 'b'); },
+    offline: function (g, f) {
       eyes(g, 12, 2, 'y'); fill(g, 19, 22, 10, 2, 'y');
-      // wifi bars, grey, with a red cross
+      // wifi bars, grey, with a flashing red cross
       fill(g, 38, 6, 2, 2, 'y'); fill(g, 41, 4, 2, 4, 'y'); fill(g, 44, 2, 2, 6, 'y');
-      line(g, 37, 1, 41, 5, 1, 'r'); line(g, 41, 1, 37, 5, 1, 'r');
+      if (f % 8 < 5) { line(g, 37, 1, 41, 5, 1, 'r'); line(g, 41, 1, 37, 5, 1, 'r'); }
     },
-    focus: function (g) {
+    focus: function (g, f) {
+      var shut = f % 40 === 39;
       fill(g, 12, 6, 7, 1, 'g'); fill(g, 29, 6, 7, 1, 'g');
-      fill(g, 13, 9, 5, 4, 'g'); fill(g, 30, 9, 5, 4, 'g');
+      fill(g, 13, shut ? 12 : 9, 5, shut ? 1 : 4, 'g'); fill(g, 30, shut ? 12 : 9, 5, shut ? 1 : 4, 'g');
       fill(g, 21, 17, 6, 1, 'g');
-      text(g, '24:59', 24, '#');
+      var s = 59 - Math.floor(f / 8) % 60;
+      text(g, '24:' + (s < 10 ? '0' : '') + s, 24, '#');
     },
-    exercise: function (g) {
-      line(g, 11, 12, 15, 8, 2, 'o'); line(g, 15, 8, 19, 12, 2, 'o');
-      line(g, 28, 12, 32, 8, 2, 'o'); line(g, 32, 8, 36, 12, 2, 'o');
-      fill(g, 20, 16, 8, 4, 'o'); fill(g, 22, 17, 4, 2, '.');
-      text(g, '0:06', 25, '#');
+    exercise: function (g, f) {
+      var oy = Math.floor(f / 2) % 2 ? -1 : 0;   // bounces
+      line(g, 11, 12 + oy, 15, 8 + oy, 2, 'o'); line(g, 15, 8 + oy, 19, 12 + oy, 2, 'o');
+      line(g, 28, 12 + oy, 32, 8 + oy, 2, 'o'); line(g, 32, 8 + oy, 36, 12 + oy, 2, 'o');
+      fill(g, 20, 16 + oy, 8, 4, 'o'); fill(g, 22, 17 + oy, 4, 2, '.');
+      text(g, '0:0' + (6 - Math.floor(f / 8) % 7), 25, '#');
     },
-    slashed: function (g) {
+    slashed: function (g, f) {
       fill(g, 11, 5, 4, 2); fill(g, 15, 4, 3, 2); fill(g, 30, 4, 3, 2); fill(g, 33, 5, 4, 2);
       eyes(g, 9, 4);
       fill(g, 18, 19, 2, 2); fill(g, 20, 17, 2, 2); fill(g, 22, 16, 4, 2); fill(g, 26, 17, 2, 2); fill(g, 28, 19, 2, 2);
-      text(g, '-1 ATTN', 25, 'r');
+      if (f % 8 < 6) text(g, '-1 ATTN', 25, 'r');
     }
   };
-  function cells(g) {
-    var out = '<rect width="' + W + '" height="' + H + '" fill="' + BG + '"/>';
+  // the dark off-grid is a pattern drawn once; each frame only redraws the lit cells
+  document.body.insertAdjacentHTML('afterbegin', '<svg style="position:absolute;width:0;height:0" aria-hidden="true"><defs><pattern id="px" width="1" height="1" patternUnits="userSpaceOnUse"><rect x="0.08" y="0.08" width="0.84" height="0.84" fill="' + OFF + '"/></pattern></defs></svg>');
+  var STATIC = '<rect width="' + W + '" height="' + H + '" fill="' + BG + '"/><rect width="' + W + '" height="' + H + '" fill="url(#px)"/>';
+  function lit(g) {
+    var out = '';
     for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
-      var c = COLORS[g[y][x]] || OFF;
-      out += '<rect x="' + (x + 0.08) + '" y="' + (y + 0.08) + '" width="0.84" height="0.84" fill="' + c + '"/>';
+      var c = COLORS[g[y][x]];
+      if (c) out += '<rect x="' + (x + 0.08) + '" y="' + (y + 0.08) + '" width="0.84" height="0.84" fill="' + c + '"/>';
     }
     return out;
   }
-  function render(name) { var g = blank(); screens[name](g); return cells(g); }
+  var faces = [];
   document.querySelectorAll('[data-screen]').forEach(function (el) {
     var name = el.getAttribute('data-screen');
-    el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" role="img" aria-label="' + name + ' screen">' + render(name) + '</svg>';
+    el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" role="img" aria-label="' + name + ' screen">' + STATIC + '<g></g></svg>';
+    faces.push({ name: name, g: el.querySelector('g') });
   });
   var hero = document.getElementById('hero-screen');
-  if (hero) hero.innerHTML = render('focus');
+  if (hero) { hero.innerHTML = STATIC + '<g></g>'; faces.push({ name: 'focus', g: hero.querySelector('g') }); }
+  var f = 0;
+  function tick() {
+    faces.forEach(function (fc) { var g = blank(); screens[fc.name](g, f); fc.g.innerHTML = lit(g); });
+    f++;
+  }
+  tick();
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches)
+    setInterval(function () { if (!document.hidden) tick(); }, 130);
 })();
 </script>
 </body>
