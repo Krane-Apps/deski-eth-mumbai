@@ -155,7 +155,7 @@ These are real 0G request ids from one focus session on the board, on 7 November
 | --- | --- | --- | --- | --- |
 | Ishan | Hardware build and wiring, firmware, product | [bluntbrain](https://github.com/bluntbrain) | [@bluntbrainsol](https://t.me/bluntbrainsol) | [@bluntbrain](https://x.com/bluntbrain) |
 | Lovish | Backend: 0G tool calls, Hedera Stablecoin Studio, 0G Storage, ENS, project page | [LovishB](https://github.com/LovishB) | [@lovishbadlani](https://t.me/lovishbadlani) | [@luvbweb3](https://x.com/luvbweb3) |
-| Yash | Design engineer: the first Deski concept and the design of its faces | | [@Peanut0505](https://t.me/Peanut0505) | [@Yassshhu](https://x.com/Yassshhu) |
+| Yash | Design engineer: the first Deski concept and the design of its faces | [yash2k26](https://github.com/yash2k26) | [@Peanut0505](https://t.me/Peanut0505) | [@Yassshhu](https://x.com/Yassshhu) |
 
 ## AI usage
 
