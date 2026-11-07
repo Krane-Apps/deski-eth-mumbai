@@ -1,5 +1,5 @@
 // desky talk: hold the talk button, speak, let go. desky turns your words into text,
-// thinks of a reply, says it out loud and types it on the screen, with its pixel face.
+// thinks of a reply and types it on the screen, with its pixel face. there is no speaker.
 // focus.ino (second tab) adds staked focus sessions with camera checks.
 // libraries: "Adafruit ST7735 and ST7789" and "ArduinoJson" (v7).
 // tools: ESP32S3 Dev Module, PSRAM: OPI PSRAM, Flash Size: 16MB,
@@ -17,7 +17,7 @@
 #include <time.h>
 #include "esp_camera.h"
 #include "esp_http_server.h"
-#include "secrets.h"   // WIFI_NAME, WIFI_PASSWORD, ZG_KEY, ELEVENLABS_KEY, BACKEND_URL
+#include "secrets.h"   // WIFI_NAME, WIFI_PASSWORD, ZG_KEY, BACKEND_URL
 
 // ================= settings =================
 #define LAYOUT 2   // 1: the old wiring. 2: the compact build from the guide
@@ -26,24 +26,20 @@
 const char* ZG_URL        = "https://router-api.0g.ai/v1";
 const char* ZG_STT_MODEL  = "whisper-large-v3";    // runs sealed in a TEE (TeeML)
 const char* ZG_CHAT_MODEL = "0gm-1.0-35b-a3b";     // 0G's own model, TeeML
-const char* VOICE_ID   = "JBFqnCBsd6RMkjVDRZzb";
-const char* TTS_MODEL  = "eleven_flash_v2_5";
 const char* PERSONA =
   "You are Desky, a small cheerful robot that lives on the user's desk and helps them stay focused. "
   "Always answer in English, even if the user speaks another language, because the screen shows only English letters. "
-  "Answer in one or two short spoken sentences. No lists, no emoji, no markdown. "
-  "You cannot start, stop or stake anything yourself. A separate stake system does that and confirms it out loud. "
+  "Answer in one or two short sentences, because they are typed on a small screen. No lists, no emoji, no markdown. "
+  "You cannot start, stop or stake anything yourself. A separate stake system does that and confirms it on the screen. "
   "If the user asks to start or end a focus session or to stake, only say that you are checking with the stake system. "
   "Never say that a session, timer or stake has started or ended. "
   "If the user asks you to look up or find an ENS name, only say that you are looking it up. "
   "The stake system finds it and opens it on their laptop. "
   "Begin every answer with one mood tag: [happy], [sad], [thinking] or [neutral].";
 
-const float VOLUME    = 0.7;   // 0.1 quiet ... 1.0 loud
 const int   MIC_SHIFT = 16;    // 15 louder, 17 quieter (good peaks: 8000 to 30000)
 const int   RATE      = 16000;
 const int   MAX_TALK_S  = 8;
-const int   MAX_REPLY_S = 30;
 // ============================================
 
 #if LAYOUT == 2
@@ -53,10 +49,6 @@ const int   MAX_REPLY_S = 30;
 #define TFT_MOSI 21
 #define TFT_SCLK 20
 #define TFT_BL 19
-#define AMP_LRC 38
-#define AMP_BCLK 39
-#define AMP_DIN 40
-#define AMP_SD 42      // driven high to switch the amp on
 #define MIC_WS 3
 #define MIC_SCK 14
 #define MIC_SD 46
@@ -67,10 +59,6 @@ const int   MAX_REPLY_S = 30;
 #define TFT_MOSI 20
 #define TFT_SCLK 19
 #define TFT_BL 38
-#define AMP_LRC 41
-#define AMP_BCLK 40
-#define AMP_DIN 39
-#define AMP_SD -1      // old wiring: amp SD tied to 5V
 #define MIC_WS 1
 #define MIC_SCK 2
 #define MIC_SD 42
@@ -81,13 +69,11 @@ const int   MAX_REPLY_S = 30;
 
 Adafruit_ST7735 tft = Adafruit_ST7735(&SPI, TFT_CS, TFT_DC, TFT_RST);
 GFXcanvas16* canvas;
-I2SClass mic, spk;
+I2SClass mic;
 
 uint8_t* wavBuf;      // 44-byte wav header, then the recording
 int16_t* voice;       // the recording, right after the header
 size_t   voiceMax;
-uint8_t* replyBuf;    // spoken reply from ElevenLabs (16 kHz, 16-bit)
-size_t   replyMax;
 
 // ============ face: colour pixel expressions on a 48 x 32 grid ============
 enum State { S_IDLE, S_LISTEN, S_THINK, S_TALK, S_HAPPY, S_SAD, S_EXERCISE };
@@ -347,7 +333,7 @@ bool wrapInto(int cols, int maxLines) {
   return true;
 }
 
-void prepareText(const String& s, uint32_t audioMs) {
+void prepareText(const String& s) {
   size_t o = 0;
   for (size_t i = 0; i < s.length() && o < sizeof(sayText) - 1; i++) {
     char c = s[i];
@@ -356,27 +342,7 @@ void prepareText(const String& s, uint32_t audioMs) {
   sayText[o] = 0;
   textSize = 2;
   if (!wrapInto(12, 6)) { textSize = 1; wrapInto(25, 11); }
-  msPerChar = (audioMs && totalChars) ? max(15UL, (unsigned long)(audioMs * 9 / 10 / totalChars)) : 45;
   typeStart = millis();
-}
-
-// ============ sound ============
-void play(const int16_t* buf, size_t n) {
-  int16_t out[256];
-  for (size_t off = 0; off < n; off += 256) {
-    size_t k = min((size_t)256, n - off);
-    for (size_t i = 0; i < k; i++) out[i] = buf[off + i] * VOLUME;
-    spk.write((uint8_t*)out, k * 2);
-  }
-}
-
-void tone(int hz, int ms) {
-  int16_t buf[256];
-  float ph = 0, step = 2 * PI * hz / RATE;
-  for (int done = 0; done < RATE * ms / 1000; done += 256) {
-    for (int i = 0; i < 256; i++) { buf[i] = sin(ph) * 6000; ph += step; }
-    play(buf, 256);
-  }
 }
 
 size_t listen(int& peak) {
@@ -543,21 +509,6 @@ String reply(const String& said) {
   return answer;
 }
 
-size_t textToSpeech(const String& words) {
-  JsonDocument req;
-  req["text"] = words;
-  req["model_id"] = TTS_MODEL;
-  String body, resp;
-  serializeJson(req, body);
-  Sink out(replyBuf, replyMax);
-  uint32_t t = millis();
-  int code = post("TTS", String("https://api.elevenlabs.io/v1/text-to-speech/") + VOICE_ID + "?output_format=pcm_16000",
-                  "xi-api-key", ELEVENLABS_KEY, (uint8_t*)body.c_str(), body.length(), &resp, &out);
-  LOG("TTS", "http %d, %u bytes in %lu ms", code, (unsigned)out.len, millis() - t);
-  if (code != 200) { LOG("TTS", "server said: %s", resp.c_str()); return 0; }
-  return out.len / 2;
-}
-
 // "[happy] Hi!" -> the words, plus which face to show after speaking
 int splitMood(String& s) {
   s.trim();
@@ -575,14 +526,11 @@ int splitMood(String& s) {
   return mood;
 }
 
-// speaks the words, types them on the screen, then shows the mood for a moment
+// types the words on the screen (no speaker), then shows the mood for a moment
 void say(const String& words, int mood) {
-  size_t n = textToSpeech(words);
-  uint32_t audioMs = n * 1000UL / RATE;
-  LOG("PLAY", "%.1f s of voice (tts=%s)", audioMs / 1000.0, n ? "ElevenLabs" : "none");
-  prepareText(words, audioMs);
+  LOG("SAY", "\"%s\"", words.c_str());
+  prepareText(words);
   state = S_TALK;
-  if (n) play((int16_t*)replyBuf, n);
   uint32_t until = typeStart + totalChars * msPerChar + 1500;
   while (millis() < until) delay(20);   // let the typing finish, then a moment to read
   delay(1200);
@@ -599,8 +547,7 @@ void zgOfflineSay() {
 void oops(const char* why) {
   LOG("FAIL", "%s", why);
   state = S_SAD;
-  tone(300, 250);
-  delay(1800);
+  delay(2000);
   state = S_IDLE;
 }
 
@@ -630,7 +577,6 @@ void setup() {
   delay(400);
   Serial.println("\n=== Desky talk ===");
   pinMode(BTN, INPUT_PULLUP);
-  if (AMP_SD >= 0) { pinMode(AMP_SD, OUTPUT); digitalWrite(AMP_SD, HIGH); }
 
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, HIGH);
@@ -648,9 +594,7 @@ void setup() {
   voiceMax = RATE * MAX_TALK_S;
   wavBuf = (uint8_t*)ps_malloc(44 + voiceMax * 2);
   voice = (int16_t*)(wavBuf + 44);
-  replyMax = RATE * 2 * MAX_REPLY_S;
-  replyBuf = (uint8_t*)ps_malloc(replyMax);
-  if (!wavBuf || !replyBuf || !canvas->getBuffer()) {
+  if (!wavBuf || !canvas->getBuffer()) {
     LOG("BOOT", "no memory. Set Tools > PSRAM: OPI PSRAM");
     tft.fillScreen(ST77XX_RED);
     while (true) delay(1000);
@@ -659,8 +603,6 @@ void setup() {
   cameraStart();
   checkMinutesParser();
 
-  spk.setPins(AMP_BCLK, AMP_LRC, AMP_DIN);
-  LOG("BOOT", "speaker %s", spk.begin(I2S_MODE_STD, RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO) ? "ready" : "FAILED");
   mic.setPins(MIC_SCK, MIC_WS, -1, MIC_SD);
   LOG("BOOT", "mic %s", mic.begin(I2S_MODE_STD, RATE, I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_MONO, I2S_STD_SLOT_LEFT) ? "ready" : "FAILED");
 
@@ -677,8 +619,7 @@ void setup() {
   liveStart();
 
   state = S_HAPPY;
-  tone(880, 120); delay(60); tone(1320, 120);
-  delay(700);
+  delay(1000);
   state = S_IDLE;
   LOG("BOOT", "clock:%s", nowText().c_str());
   LOG("BOOT", "ready: hold the button, talk, let go");
@@ -717,7 +658,7 @@ void loop() {
   String answer = reply(said);
   if (!answer.length()) { zgOfflineSay(); return; }
   int mood = splitMood(answer);
-  LOG("USED", "stt=0G chat=0G tts=ElevenLabs, %lu ms after you let go", millis() - t0);
+  LOG("USED", "stt=0G chat=0G, %lu ms after you let go", millis() - t0);
   say(answer, mood);
   focusAfterTurn(said, answer);   // the backend decides if this turn stakes or unstakes
 }

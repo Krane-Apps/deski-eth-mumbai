@@ -258,7 +258,7 @@ void exerciseTest() {
   String shots[EXERCISE_PHOTOS];
   int got = 0;
   for (int i = 0; i < EXERCISE_PHOTOS; i++) {
-    tone(1200, 60);   // shutter click
+    LOG("EXERCISE", "photo %d of %d", i + 1, EXERCISE_PHOTOS);
     shots[i] = photo();
     if (shots[i].length()) got++;
     delay(PHOTO_GAP_MS);

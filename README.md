@@ -12,8 +12,8 @@ Every decision runs on 0G: speech to text, chat and vision. If 0G cannot be reac
 
 | Part | State |
 | --- | --- |
-| Hardware: ESP32-S3, screen, mic, speaker, camera, push-to-talk button | Working on two breadboards |
-| Voice: 0G speech to text and 0G chat, ElevenLabs voice, reply typed on screen | Working (`firmware/desky_talk`) |
+| Hardware: ESP32-S3, screen, mic, camera, push-to-talk button | Working on two breadboards |
+| Voice: hold the button and talk. 0G speech to text and 0G chat, reply typed on the screen | Working (`firmware/desky_talk`) |
 | Focus sessions: stake, 0G vision check every 10 s, warning, slash or unstake | Working, tested on the board |
 | Safe stop: no fallback model, "0G OFFLINE" on screen, timer paused | Working |
 | Stake on Hedera: ATTN token managed with Stablecoin Studio (mint, freeze, unfreeze, wipe) | Working (`deski-backend`). The USDC transfer behind the stake is switched off until our test account has testnet USDC. |
@@ -26,9 +26,8 @@ Every decision runs on 0G: speech to text, chat and vision. If 0G cannot be reac
 
 ```mermaid
 flowchart LR
-    you((You)) -->|hold the button and talk| deski["Deski robot<br/>ESP32-S3: mic, camera,<br/>screen, speaker"]
+    you((You)) -->|hold the button and talk| deski["Deski robot<br/>ESP32-S3: mic, camera,<br/>screen"]
     deski -->|"speech, chat, photos"| zg["0G Compute<br/>whisper-large-v3<br/>0gm-1.0-35b-a3b"]
-    deski -->|"reply text"| voice["ElevenLabs<br/>text to speech"]
     deski -->|"what you said and Deski's reply,<br/>or what the camera saw"| backend["deski-backend<br/>NestJS, POST /tool"]
     backend -->|"which tool?<br/>stake, unstake, attention, ens"| zg
     backend -->|"mint, freeze, unfreeze, wipe ATTN"| hedera["Hedera testnet<br/>Stablecoin Studio"]
@@ -69,7 +68,7 @@ sequenceDiagram
 ```
 
 1. You hold the button and talk. Deski sends the audio to 0G (`whisper-large-v3`, which runs in a TEE).
-2. 0G's own model (`0gm-1.0-35b-a3b`) writes Deski's reply. ElevenLabs reads it out, and the screen types it.
+2. 0G's own model (`0gm-1.0-35b-a3b`) writes Deski's reply, and the screen types it out.
 3. Deski sends what you said, its reply and the 0G request id to the backend. The backend asks 0G which tool to run: stake, unstake, attention or ens.
 4. A stake mints 1 ATTN with Stablecoin Studio and freezes it on Hedera. An unstake or a slash unfreezes and wipes it.
 5. During a session, Deski takes a photo every 10 seconds and asks 0G vision what it sees. It sends that sentence to the backend as `ai_res`, with `user_text: "img"`, and the backend's 0G call decides if you are focused.
@@ -106,7 +105,6 @@ These are real 0G request ids from one focus session on the board, on 7 November
 - ESP32-S3-N16R8 camera board (16 MB flash, 8 MB PSRAM)
 - 1.8 inch ST7735 screen, 128 x 160
 - INMP441 I2S microphone
-- MAX98357A I2S amplifier and a small speaker
 - 6 x 6 mm push button (push to talk)
 
 ### Wiring
@@ -115,8 +113,6 @@ These are real 0G request ids from one focus session on the board, on 7 November
 | --- | --- |
 | Screen CS, RESET, A0, SDA, SCK, LED | 45, 48, 47, 21, 20, 19 |
 | Screen VCC, GND | 5V, GND |
-| Amp LRC, BCLK, DIN, SD | 38, 39, 40, 42 (SD is driven high to turn the amp on) |
-| Amp VIN, GND | 5V, GND |
 | Mic WS, SCK, SD | 3, 14, 46 |
 | Mic VDD, GND, L/R | 3V3, GND, GND |
 | Push-to-talk button | 0 and GND (the board's BOOT button works too) |
@@ -135,7 +131,7 @@ These are real 0G request ids from one focus session on the board, on 7 November
 
 1. Install the Arduino IDE, the ESP32 board package by Espressif (3.3.x), and the libraries "Adafruit ST7735 and ST7789" and "ArduinoJson" (v7).
 2. Tools menu: ESP32S3 Dev Module, PSRAM: OPI PSRAM, Flash Size: 16MB, Partition Scheme: 16M Flash (3MB APP/9.9MB FATFS), USB CDC On Boot: Disabled. Use the USB-UART port.
-3. In `firmware/desky_talk`, copy `secrets.example.h` to `secrets.h`. Fill in your Wi-Fi, your 0G router key (`ZG_KEY`, from https://pc.0g.ai), your ElevenLabs key and the backend address (`BACKEND_URL`). The Wi-Fi must be 2.4 GHz. On an iPhone hotspot, turn on Maximize Compatibility.
+3. In `firmware/desky_talk`, copy `secrets.example.h` to `secrets.h`. Fill in your Wi-Fi, your 0G router key (`ZG_KEY`, from https://pc.0g.ai) and the backend address (`BACKEND_URL`). The Wi-Fi must be 2.4 GHz. On an iPhone hotspot, turn on Maximize Compatibility.
 4. Each sketch has `#define LAYOUT 2` for the wiring above. Upload, open the Serial Monitor at 115200, hold the button and talk.
 
 ### Backend setup
@@ -159,7 +155,7 @@ These are real 0G request ids from one focus session on the board, on 7 November
 
 ## AI usage
 
-Deski itself uses AI at runtime: 0G models for speech to text, chat and vision, and ElevenLabs for the voice. This section is about the AI tools we used to build it.
+Deski itself uses AI at runtime: 0G models for speech to text, chat and vision. This section is about the AI tools we used to build it.
 
 - **Firmware.** Most of the code in `firmware/desky_talk`, the camera test and the laptop helper `firmware/desky-link.py` was written with Claude Code, Anthropic's coding assistant. Ishan picked the parts, built and wired the hardware, decided how Deski behaves, and tested every change on the real board. Claude Code wrote most of the C++, compiled and flashed it, and read the serial logs with him to fix problems.
 - **Design.** Yash designed the Deski concept and its faces. The face code in `firmware/desky_talk` follows his designs.
