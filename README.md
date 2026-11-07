@@ -153,13 +153,15 @@ These are real 0G request ids from one focus session on the board, on 7 November
 
 | Name | What they built | GitHub | Telegram | X |
 | --- | --- | --- | --- | --- |
-| Ishan | Hardware build and wiring, firmware, product | [bluntbrain](https://github.com/bluntbrain) | To fill in | To fill in |
-| Lovish | Backend: 0G tool calls, Hedera Stablecoin Studio, 0G Storage, ENS, project page | [LovishB](https://github.com/LovishB) | To fill in | To fill in |
+| Ishan | Hardware build and wiring, firmware, product | [bluntbrain](https://github.com/bluntbrain) | [@bluntbrainsol](https://t.me/bluntbrainsol) | [@bluntbrain](https://x.com/bluntbrain) |
+| Lovish | Backend: 0G tool calls, Hedera Stablecoin Studio, 0G Storage, ENS, project page | [LovishB](https://github.com/LovishB) | [@lovishbadlani](https://t.me/lovishbadlani) | [@luvbweb3](https://x.com/luvbweb3) |
+| Yash | Design engineer: the first Deski concept and the design of its faces | | [@Peanut0505](https://t.me/Peanut0505) | [@Yassshhu](https://x.com/Yassshhu) |
 
 ## AI usage
 
 Deski itself uses AI at runtime: 0G models for speech to text, chat and vision, and ElevenLabs for the voice. This section is about the AI tools we used to build it.
 
 - **Firmware.** Most of the code in `firmware/desky_talk`, the camera test and the laptop helper `firmware/desky-link.py` was written with Claude Code, Anthropic's coding assistant. Ishan picked the parts, built and wired the hardware, decided how Deski behaves, and tested every change on the real board. Claude Code wrote most of the C++, compiled and flashed it, and read the serial logs with him to fix problems.
+- **Design.** Yash designed the Deski concept and its faces. The face code in `firmware/desky_talk` follows his designs.
 - **Backend.** Lovish wrote `deski-backend`. Two small changes in `deski-backend/src/tool/tool.service.ts` were made with Claude Code: the optional stake numbers and the longer 0G timeout. Lovish, add here how you used AI tools for the backend and the project page.
 - **Docs.** This README was drafted with Claude Code and checked by the team.
