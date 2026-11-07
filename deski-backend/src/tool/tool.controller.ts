@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpException, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpException, Logger, Post } from '@nestjs/common';
 import { StorageService } from '../storage/storage.service';
 import { failed, OgTrace, ToolService } from './tool.service';
 
@@ -6,6 +6,8 @@ const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.trim().
 
 @Controller('tool')
 export class ToolController {
+  private readonly logger = new Logger(ToolController.name);
+
   constructor(
     private readonly toolService: ToolService,
     private readonly storage: StorageService,
@@ -15,6 +17,7 @@ export class ToolController {
   @HttpCode(200)
   async handle(@Body() body: { user_text?: unknown; ai_res?: unknown; request_id?: unknown }) {
     const time = new Date().toISOString();
+    this.logger.log(`/tool params: ${JSON.stringify(body)}`);
     let status = 200;
     let response: unknown = failed();
     // decision = the backend's own 0G call; stays null if 0G was never reached.
