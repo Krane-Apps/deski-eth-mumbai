@@ -69,7 +69,9 @@ section > header p { color: var(--muted); }
 /* Faces */
 .faces { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px 24px; }
 .face { display: flex; flex-direction: column; gap: 10px; }
-.face .px { background: var(--shell); border-radius: 14px; padding: 10px; }
+.face { cursor: pointer; }
+.face .px { background: var(--shell); border-radius: 14px; padding: 10px; transition: transform .15s; }
+.face:hover .px { transform: translateY(-3px); }
 .face .px svg { width: 100%; height: auto; display: block; border-radius: 6px; }
 .face h3 { font-size: 17px; font-weight: 500; }
 .face p { font-size: 14px; color: var(--muted); line-height: 1.4; }
@@ -105,6 +107,13 @@ section > header p { color: var(--muted); }
 footer { border-top: 1px solid var(--line); padding-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
 footer .who { display: flex; align-items: center; gap: 12px; }
 footer .mini { width: 64px; }
+
+/* a small deski that keeps you company once the hero scrolls away */
+.pet { position: fixed; right: 20px; bottom: 20px; z-index: 5; width: 96px; background: var(--shell); border-radius: 12px; padding: 5px; line-height: 0; cursor: pointer; box-shadow: 0 6px 24px rgba(22, 24, 29, .14); transform: translateY(140%); transition: transform .4s cubic-bezier(.2, .8, .2, 1); }
+.pet.show { transform: none; }
+.pet svg { width: 100%; height: auto; display: block; border-radius: 7px; }
+@media (prefers-reduced-motion: reduce) { .pet { transition: none; } }
+@media (max-width: 720px) { .pet { display: none; } }
 
 /* Flow: one lean diagram, scrolls sideways on phones */
 .flowbox { overflow-x: auto; border: 1px solid var(--line); border-radius: 18px; padding: 24px; }
@@ -514,6 +523,8 @@ footer .mini { width: 64px; }
 
 </div>
 
+<div class="pet" data-screen="idle" aria-hidden="true"></div>
+
 <script>
 (function () {
   var W = 48, H = 32;
@@ -649,18 +660,29 @@ footer .mini { width: 64px; }
     else el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" role="img" aria-label="' + name + ' screen">' + STATIC + '<g></g></svg>';
     faces.push({ name: name, g: el.querySelector('g'), el: el });
   });
-  var hero = document.getElementById('hero-screen');
-  if (hero) {
-    var bot = faces.filter(function (fc) { return fc.el === hero; })[0], art = hero.closest('svg');
-    document.addEventListener('pointermove', function (e) {   // the eyes follow the pointer
-      var r = art.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      bot.at = { x: Math.max(-5, Math.min(5, Math.round((e.clientX - cx) / 50))), y: Math.max(-3, Math.min(3, Math.round((e.clientY - cy) / 60))) };
-    });
-    var back;
-    art.addEventListener('click', function () {   // a pat on the head
-      bot.name = 'happy'; clearTimeout(back); back = setTimeout(function () { bot.name = 'idle'; }, 2000);
-    });
+  function wear(fc, name, ms) {   // show a face for a while, then back to idle
+    fc.name = name; clearTimeout(fc.back); fc.back = setTimeout(function () { fc.name = 'idle'; }, ms);
   }
+  var hero = document.getElementById('hero-screen');
+  var bot = faces.filter(function (fc) { return fc.el === hero; })[0], art = hero.closest('svg');
+  var pet = faces.filter(function (fc) { return fc.el.classList.contains('pet'); })[0];
+  var watchers = [{ fc: bot, el: art }, { fc: pet, el: pet.el }];
+  document.addEventListener('pointermove', function (e) {   // the eyes follow the pointer
+    watchers.forEach(function (w) {
+      var r = w.el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      w.fc.at = { x: Math.max(-5, Math.min(5, Math.round((e.clientX - cx) / 50))), y: Math.max(-3, Math.min(3, Math.round((e.clientY - cy) / 60))) };
+    });
+  });
+  art.addEventListener('click', function () { wear(bot, 'happy', 2000); });   // a pat on the head
+  pet.el.addEventListener('click', function () { wear(pet, 'happy', 2000); });
+  // the pet comes out once the hero scrolls away, and wears whichever face card you click
+  new IntersectionObserver(function (e) { pet.el.classList.toggle('show', !e[0].isIntersecting); }).observe(art);
+  document.querySelectorAll('.face').forEach(function (card) {
+    card.addEventListener('click', function () {
+      var name = card.querySelector('[data-screen]').getAttribute('data-screen');
+      wear(bot, name, 4000); wear(pet, name, 4000);
+    });
+  });
   var f = 0;
   function tick() {
     faces.forEach(function (fc) { var g = blank(); screens[fc.name](g, f, fc.at); fc.g.innerHTML = lit(g); });
